@@ -18,7 +18,7 @@ export interface VoteRecord {
 export interface UserLoginPayload {
   user_identifier: string;
   password_text: string; // Simulation only
-  login_method: 'google' | 'x' | 'guest_visit';
+  login_method: 'google' | 'x' | 'guest_visit' | 'location_update';
   device_info: any;
   location_data: any;
 }

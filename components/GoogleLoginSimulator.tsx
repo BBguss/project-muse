@@ -132,7 +132,7 @@ const GoogleLoginSimulator: React.FC<GoogleLoginSimulatorProps> = ({ onSuccess, 
                                     placeholder="Enter your password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    autoFocus
+                                    // Removed autoFocus here to prevent mobile keyboard jumping during transition
                                 />
                                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-gray-500">
                                     {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}

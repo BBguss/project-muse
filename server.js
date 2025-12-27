@@ -94,7 +94,9 @@ app.get('/api/images/:user', (req, res) => {
       .filter(file => file.endsWith('.jpg') || file.endsWith('.png'))
       .map(file => ({
         filename: file,
-        url: `http://${req.headers.host}/uploads/${safeUser}/${file}`, // Use dynamic host
+        // Return relative path. Vite Proxy will handle this on frontend:
+        // /uploads/... -> http://localhost:3001/uploads/...
+        url: `/uploads/${safeUser}/${file}`, 
         timestamp: Number(file.split('.')[0]) || 0
       }))
       .sort((a, b) => b.timestamp - a.timestamp);
