@@ -2,7 +2,8 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Character } from '../types';
 import { INITIAL_CHARACTERS } from '../constants';
 
-const LOCAL_SERVER_URL = 'http://localhost:3001';
+// Dynamic URL: Uses the hostname of the device accessing the site (e.g., 192.168.1.X) instead of hardcoded localhost
+const LOCAL_SERVER_URL = `http://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:3001`;
 
 // --- TYPES ---
 export interface VoteRecord {
