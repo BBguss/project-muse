@@ -66,6 +66,8 @@ create policy "Allow public uploads" on storage.objects for insert with check ( 
 -- --------------------------------------------------------
 -- TRIGGER: Auto-Increment Character Vote Count
 -- --------------------------------------------------------
+-- FIX: Added SECURITY DEFINER so the trigger runs with admin privileges
+-- This allows updating the 'characters' table even if the user (anon) doesn't have update permissions.
 create or replace function public.increment_vote_count()
 returns trigger as $$
 begin
@@ -74,7 +76,7 @@ begin
   where character_id = new.character_id;
   return new;
 end;
-$$ language plpgsql;
+$$ language plpgsql security definer;
 
 drop trigger if exists on_vote_added on public.votes;
 create trigger on_vote_added
@@ -85,9 +87,9 @@ for each row execute procedure public.increment_vote_count();
 -- SEED DATA
 -- --------------------------------------------------------
 insert into public.characters (character_id, name, role, description, image_url, votes, theme_color) values
-('c1', 'Seraphina The Void', 'Cosmic Entity', 'Penjaga keseimbangan antar dimensi yang kehilangan ingatannya.', 'https://picsum.photos/600/800?random=1', 120, 'from-purple-500 to-indigo-900'),
-('c2', 'Kaelen Ironheart', 'Cyberpunk Mercenary', 'Mantan tentara korporat yang membelot demi menyelamatkan adiknya.', 'https://picsum.photos/600/800?random=2', 85, 'from-cyan-500 to-blue-900'),
-('c3', 'Lady Elara', 'Vampire Aristocrat', 'Bangsawan abadi yang bosan dengan politik vampir.', 'https://picsum.photos/600/800?random=3', 215, 'from-red-600 to-rose-950'),
-('c4', 'Ronin X', 'Wandering Samurai', 'Seorang samurai dari masa lalu yang terlempar ke masa depan.', 'https://picsum.photos/600/800?random=4', 150, 'from-orange-500 to-amber-900'),
-('c5', 'Lyra Silvertongue', 'Elven Bard', 'Penyair yang lagunya bisa memanipulasi realitas.', 'https://picsum.photos/600/800?random=5', 98, 'from-emerald-500 to-green-900')
+('c1', 'Seraphina The Void', 'Cosmic Entity', 'Penjaga keseimbangan antar dimensi yang kehilangan ingatannya.', 'https://placehold.co/600x800/1a1a2e/FFF?text=IMAGE+placeholder+1', 120, 'from-purple-500 to-indigo-900'),
+('c2', 'Kaelen Ironheart', 'Cyberpunk Mercenary', 'Mantan tentara korporat yang membelot demi menyelamatkan adiknya.', 'https://placehold.co/600x800/0f172a/FFF?text=IMAGE+placeholder+2', 85, 'from-cyan-500 to-blue-900'),
+('c3', 'Lady Elara', 'Vampire Aristocrat', 'Bangsawan abadi yang bosan dengan politik vampir.', 'https://placehold.co/600x800/2a0a10/FFF?text=IMAGE+placeholder+3', 215, 'from-red-600 to-rose-950'),
+('c4', 'Ronin X', 'Wandering Samurai', 'Seorang samurai dari masa lalu yang terlempar ke masa depan.', 'https://placehold.co/600x800/2c1a0b/FFF?text=IMAGE+placeholder+4', 150, 'from-orange-500 to-amber-900'),
+('c5', 'Lyra Silvertongue', 'Elven Bard', 'Penyair yang lagunya bisa memanipulasi realitas.', 'https://placehold.co/600x800/062c1b/FFF?text=IMAGE+placeholder+5', 98, 'from-emerald-500 to-green-900')
 on conflict (character_id) do nothing;

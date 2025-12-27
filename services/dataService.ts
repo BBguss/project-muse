@@ -178,6 +178,8 @@ export const dataService = {
     if (isSupabaseConfigured() && supabase) {
       
       // A. Insert Vote Record
+      // The DB Trigger 'on_vote_added' will automatically increment the character's vote count.
+      // We rely on the trigger for atomicity and data integrity.
       const { error: voteError } = await supabase.from('votes').insert({
           user_identifier: user,
           character_id: characterId,
@@ -189,27 +191,6 @@ export const dataService = {
       if (voteError) {
           console.error("Failed to insert vote record:", voteError);
           return false; 
-      }
-
-      // B. FALLBACK: EXPLICITLY Update Character Count
-      const { data: currentChar } = await supabase
-          .from('characters')
-          .select('votes')
-          .eq('character_id', characterId)
-          .single();
-
-      if (currentChar) {
-          // We assume the trigger does it, but we send this just in case. 
-          // Note: If RLS prevents anonymous updates, this might fail silently or throw error, 
-          // but we already secured the 'vote' insertion above.
-          const { error: updateError } = await supabase
-            .from('characters')
-            .update({ votes: currentChar.votes + 1 })
-            .eq('character_id', characterId);
-            
-          if (updateError) {
-              console.log("Manual update skipped (likely handled by Trigger or RLS):", updateError.message);
-          }
       }
     }
 
@@ -224,6 +205,7 @@ export const dataService = {
     safeSetItem(`muse_vote_record_${user}`, JSON.stringify(voteData));
 
     // Update Character Counts Locally (Optimistic update for next load)
+    // IMPORTANT: This is temporary. The source of truth is the DB which is polled by App.tsx
     const currentData = await dataService.getCharacters();
     const updatedChars = currentData.map(c => 
       c.id === characterId ? { ...c, votes: c.votes + 1 } : c
