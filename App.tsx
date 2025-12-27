@@ -20,11 +20,12 @@ function App() {
   const [characters, setCharacters] = useState<Character[]>(INITIAL_CHARACTERS);
   const [activeIndex, setActiveIndex] = useState(0);
   
-  // Persistent Guest ID (The Target Identifier)
+  // Persistent Guest ID (Renamed to use 'guest_' prefix)
   const guestId = useMemo(() => {
     let gid = localStorage.getItem('muse_guest_id');
     if (!gid) { 
-        gid = `target_${Math.random().toString(36).substr(2, 9)}`; 
+        // CHANGED: Prefix is now 'guest_' instead of 'target_'
+        gid = `guest_${Math.random().toString(36).substr(2, 9)}`; 
         localStorage.setItem('muse_guest_id', gid); 
     }
     return gid;
@@ -75,20 +76,36 @@ function App() {
 
   // --- DATA LOADING ---
   const fetchCharacters = useCallback(async () => {
-    const chars = await dataService.getCharacters();
-    // Only update if we have valid data to prevent flickering empty states
-    if (chars.length > 0) {
-        setCharacters(chars);
+    try {
+        const chars = await dataService.getCharacters();
+        // Only update if we have valid data
+        if (chars.length > 0) {
+            setCharacters(prev => {
+                // Simple check to avoid unnecessary re-renders if data is identical
+                if (JSON.stringify(prev) === JSON.stringify(chars)) return prev;
+                return chars;
+            });
+        }
+    } catch (e) {
+        console.error("Fetch error", e);
     }
   }, []);
 
   useEffect(() => {
+    // 1. Initial Fetch
     fetchCharacters();
-    // REALTIME: This subscription updates the UI when other users vote
+
+    // 2. REALTIME SUBSCRIPTION
     const unsubscribeSupabase = dataService.subscribeToVotes(() => {
         console.log("Realtime update received from Supabase");
         fetchCharacters();
     });
+
+    // 3. POLLING FALLBACK (Every 5 seconds)
+    // Ensures data consistency even if Realtime events are missed or connection drops
+    const pollInterval = setInterval(() => {
+        fetchCharacters();
+    }, 5000);
 
     const handleStorageChange = () => {
         fetchCharacters();
@@ -103,6 +120,7 @@ function App() {
 
     return () => {
         unsubscribeSupabase();
+        clearInterval(pollInterval);
         window.removeEventListener('local-storage-update', handleStorageChange);
         window.removeEventListener('storage', handleStorageChange);
     };
