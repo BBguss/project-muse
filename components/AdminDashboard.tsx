@@ -179,7 +179,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                                             {log.ip}
                                         </td>
                                         <td className="p-4">
-                                            {log.location ? (
+                                            {/* SAFETY CHECK: Ensure lat/lng are actual numbers before calling toFixed */}
+                                            {log.location && typeof log.location.lat === 'number' && typeof log.location.lng === 'number' ? (
                                                 <a 
                                                     href={`https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`} 
                                                     target="_blank" 
