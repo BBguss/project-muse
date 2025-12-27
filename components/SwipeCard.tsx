@@ -34,34 +34,34 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
     },
     left: { 
       x: "-85%", 
-      scale: 0.8, 
+      scale: 0.85, // Slightly larger inactive cards
       zIndex: 10, 
-      opacity: 0.5,
-      rotateY: 25,
-      filter: "brightness(0.4) blur(1px)",
+      opacity: 0.6,
+      rotateY: 15, // Reduced rotation for smoother look
+      filter: "brightness(0.5) blur(1px)",
     },
     right: { 
       x: "85%", 
-      scale: 0.8, 
+      scale: 0.85, 
       zIndex: 10, 
-      opacity: 0.5,
-      rotateY: -25,
-      filter: "brightness(0.4) blur(1px)",
+      opacity: 0.6,
+      rotateY: -15, // Reduced rotation
+      filter: "brightness(0.5) blur(1px)",
     },
     farLeft: {
       x: "-150%", 
-      scale: 0.6, 
+      scale: 0.7, 
       zIndex: 0, 
       opacity: 0, 
-      rotateY: 45, 
+      rotateY: 25, 
       filter: "brightness(0) blur(4px)", 
     },
     farRight: { 
       x: "150%", 
-      scale: 0.6, 
+      scale: 0.7, 
       zIndex: 0, 
       opacity: 0, 
-      rotateY: -45, 
+      rotateY: -25, 
       filter: "brightness(0) blur(4px)", 
     }
   };
@@ -88,13 +88,14 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
       initial={false}
       animate={currentState}
       variants={variants}
-      transition={{ type: "spring", stiffness: 260, damping: 20 }}
+      // UPDATED PHYSICS: Lower stiffness, higher damping for buttery smoothness
+      transition={{ type: "spring", stiffness: 120, damping: 25, mass: 1 }}
       className="absolute w-[72%] max-w-[280px] aspect-[9/14] cursor-pointer origin-bottom touch-none"
       onClick={onClick}
       style={{ perspective: 1000 }}
       drag={isActive ? "x" : false}
       dragConstraints={{ left: 0, right: 0 }}
-      dragElastic={0.1}
+      dragElastic={0.25} // Increased elasticity for better feel
       onDragEnd={handleDragEnd}
       whileTap={isActive ? { scale: 0.98, cursor: "grabbing" } : {}}
     >
@@ -111,7 +112,7 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
       </AnimatePresence>
       
       {/* Main Card */}
-      <div className={`w-full h-full rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden shadow-2xl bg-slate-900 border transition-all duration-300 relative group ${isActive ? 'border-white/20' : 'border-slate-800'}`}>
+      <div className={`w-full h-full rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden shadow-2xl bg-slate-900 border transition-all duration-500 relative group ${isActive ? 'border-white/20' : 'border-slate-800'}`}>
         
         {/* Badge - Top of Card */}
         <motion.div 
@@ -142,7 +143,7 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
 
         {/* Text Content */}
         <div className="absolute inset-0 p-4 sm:p-5 flex flex-col justify-end text-center select-none">
-           <motion.div animate={{ opacity: isActive ? 1 : 0 }} transition={{ duration: 0.2 }}>
+           <motion.div animate={{ opacity: isActive ? 1 : 0 }} transition={{ duration: 0.3 }}>
              <span className="inline-block px-2 py-0.5 mb-1.5 text-[8px] sm:text-[9px] font-bold tracking-widest uppercase text-white/70 bg-white/10 rounded border border-white/10 backdrop-blur-sm">
                {character.role}
              </span>
@@ -159,7 +160,7 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
 
         {/* Dimmer for inactive cards */}
         {!isActive && (
-          <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-[1px] transition-all" />
+          <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-[1px] transition-all duration-500" />
         )}
 
       </div>
