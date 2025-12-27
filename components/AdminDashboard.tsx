@@ -127,7 +127,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                  action: parsed.method === 'guest_visit' ? 'Site Visit' : 'Login',
                  timestamp: parsed.timestamp,
                  ip: parsed.ip || 'Unknown',
-                 location: null, // Login logs might not have location initially
+                 // FIX: Now reading location from parsed log (added in dataService update)
+                 location: parsed.location || null, 
                  device: parsed.deviceInfo,
                  status: 'VISITOR'
              });
@@ -159,9 +160,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
         // Find the specific vote action if available
         const voteLog = uLogs.find(l => l.status === 'VOTER');
         const displayAction = voteLog ? voteLog.action : latestLog.action;
+        
+        // Merge data: If latest log (e.g. refresh) has no location but a previous log does, keep the location
+        const bestLocation = uLogs.find(l => l.location)?.location || null;
 
         userMap.set(userId, {
             ...latestLog,
+            location: bestLocation, // Use best available location
             status: hasVoted ? 'VOTER' : 'VISITOR',
             action: displayAction
         });
