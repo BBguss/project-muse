@@ -1,0 +1,8 @@
+{
+  "name": "MUSE - Roleplay Character Polling",
+  "description": "A modern, swipe-based polling application for roleplay characters featuring real-time rankings and AI-generated lore.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ]
+}
