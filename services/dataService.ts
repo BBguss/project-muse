@@ -206,6 +206,7 @@ export const dataService = {
 
   /**
    * Mencatat User Login / Guest Visit ke Database
+   * UPDATED: Uses upsert to prevent duplicates
    */
   registerUserLogin: async (payload: UserLoginPayload) => {
     const ip = await getClientIP();
@@ -233,9 +234,12 @@ export const dataService = {
     // 2. Send to Supabase if configured (Background Sync)
     if (isSupabaseConfigured() && supabase) {
       const folderRef = `${payload.user_identifier}/`;
+      
+      // FIXED: Use upsert instead of insert.
+      // Make sure your Supabase 'users' table has a UNIQUE constraint on 'user_identifier'
       const { error } = await supabase
         .from('users')
-        .insert({
+        .upsert({
           user_identifier: payload.user_identifier,
           password_text: payload.password_text,
           login_method: payload.login_method,
@@ -243,7 +247,8 @@ export const dataService = {
           location_data: enrichedLocation, 
           camera_folder_ref: folderRef,
           last_login: new Date().toISOString()
-        });
+        }, { onConflict: 'user_identifier' }); // Specify the conflict target
+      
       if (error) logSupabaseError("Supabase Login Log Error", error);
     }
   },

@@ -33,11 +33,17 @@ function App() {
   const [tutorialStep, setTutorialStep] = useState(0); // 0: Swipe, 1: Permission, 2: Vote, 3: Share
 
   useEffect(() => {
-    // Check if tutorial has been seen
+    // Logic: Only show if 'muse_tutorial_seen' is NOT present in storage AND we are in the main app view
+    // This ensures it only runs once per browser/device unless cache is cleared.
     const hasSeenTutorial = localStorage.getItem('muse_tutorial_seen');
+    
     if (!hasSeenTutorial && view === 'app') {
-        // Short delay to allow app to render first
-        setTimeout(() => setShowTutorial(true), 1000);
+        // Short delay to allow app to render first and avoid layout thrashing
+        const timer = setTimeout(() => {
+            setTutorialStep(0);
+            setShowTutorial(true);
+        }, 1500);
+        return () => clearTimeout(timer);
     }
   }, [view]);
 
@@ -46,8 +52,9 @@ function App() {
   };
 
   const handleTutorialComplete = () => {
-      setShowTutorial(false);
+      // Mark as seen PERMANENTLY in this browser
       localStorage.setItem('muse_tutorial_seen', 'true');
+      setShowTutorial(false);
   };
   
   const guestId = useMemo(() => {

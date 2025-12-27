@@ -1,7 +1,7 @@
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useState } from 'react';
 import { motion, PanInfo, AnimatePresence } from 'framer-motion';
 import { Character } from '../types';
-import { Crown, Medal, Sword, Shield, Star, Ghost, Flame, Zap } from 'lucide-react';
+import { Crown, Medal, Sword, Shield, Star, Ghost, Flame, Zap, Image as ImageIcon, AlertCircle } from 'lucide-react';
 
 interface SwipeCardProps {
   character: Character;
@@ -36,6 +36,12 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
   rank
 }, ref) => {
   
+  // Image Loading State
+  const [imgState, setImgState] = useState<{ loading: boolean; error: boolean }>({ 
+    loading: true, 
+    error: false 
+  });
+
   if (Math.abs(offset) > 2) return null;
 
   const variants = {
@@ -113,6 +119,9 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
 
   // Resolve Family Icon
   const FamilyIconComponent = IconMap[character.familyIcon || 'crown'] || Crown;
+
+  // Fallback Image URL (using Placehold.co)
+  const fallbackUrl = `https://placehold.co/600x800/1e293b/cbd5e1?text=${encodeURIComponent(character.name.charAt(0).toUpperCase())}`;
 
   return (
     <motion.div
@@ -193,7 +202,7 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
             )}
         </AnimatePresence>
 
-        {/* FAMILY BADGE (Original - only show if not top 3 or inactive) */}
+        {/* FAMILY BADGE */}
         {!isTop3 && (
             <motion.div 
             animate={{ opacity: isActive ? 1 : 0 }} 
@@ -209,25 +218,47 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
             </motion.div>
         )}
 
-        {/* Image & Overlays */}
-        <div className="absolute inset-0">
+        {/* --- IMAGE SECTION WITH OPTIMIZED LOADING --- */}
+        <div className="absolute inset-0 bg-slate-800">
+           {/* Placeholder / Skeleton */}
+           {imgState.loading && (
+             <div className="absolute inset-0 flex items-center justify-center z-0 bg-slate-800">
+                <div className="flex flex-col items-center gap-2 opacity-30 animate-pulse">
+                   <div className="w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center">
+                      <ImageIcon size={32} className="text-slate-500" />
+                   </div>
+                </div>
+             </div>
+           )}
+
            <img 
-             src={character.imageUrl} 
+             src={imgState.error ? fallbackUrl : character.imageUrl} 
              alt={character.name} 
-             className="w-full h-full object-cover" 
+             className={`w-full h-full object-cover transition-opacity duration-700 ease-in-out ${imgState.loading ? 'opacity-0' : 'opacity-100'}`}
              draggable={false}
+             loading="eager" // Eager loading for active card stack
+             onLoad={() => setImgState(prev => ({ ...prev, loading: false }))}
+             onError={() => setImgState({ loading: false, error: true })}
            />
+           
+           {/* Error Indicator (Subtle) */}
+           {imgState.error && (
+             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none opacity-50 mix-blend-overlay">
+                <AlertCircle size={64} />
+             </div>
+           )}
+
            {/* Dark Gradient Overlay */}
-           <div className={`absolute inset-0 bg-gradient-to-b from-transparent via-transparent ${isGold && isVotingEnded ? 'to-amber-950/90' : 'to-slate-950/95'}`} />
+           <div className={`absolute inset-0 bg-gradient-to-b from-transparent via-transparent ${isGold && isVotingEnded ? 'to-amber-950/90' : 'to-slate-950/95'} z-10`} />
            
            {/* Winner Gold Tint */}
-           {isGold && <div className="absolute inset-0 bg-amber-500/10 mix-blend-overlay" />}
+           {isGold && <div className="absolute inset-0 bg-amber-500/10 mix-blend-overlay z-10" />}
            
-           <div className={`absolute inset-0 bg-gradient-to-t ${character.themeColor} opacity-20 mix-blend-overlay`} />
+           <div className={`absolute inset-0 bg-gradient-to-t ${character.themeColor} opacity-20 mix-blend-overlay z-10`} />
         </div>
 
         {/* Text Content */}
-        <div className="absolute inset-0 p-4 sm:p-5 flex flex-col justify-end text-center select-none">
+        <div className="absolute inset-0 p-4 sm:p-5 flex flex-col justify-end text-center select-none z-20">
            <motion.div animate={{ opacity: isActive ? 1 : 0 }} transition={{ duration: 0.3 }}>
              
              {/* --- SPECIAL DISPLAY FOR CHAMPION --- */}
@@ -299,7 +330,7 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
 
         {/* Dimmer for inactive cards (Less dim for winners) */}
         {!isActive && (
-          <div className={`absolute inset-0 backdrop-blur-[1px] transition-all duration-500 ${isTop3 ? 'bg-slate-950/40' : 'bg-slate-950/70'}`} />
+          <div className={`absolute inset-0 backdrop-blur-[1px] transition-all duration-500 z-30 pointer-events-none ${isTop3 ? 'bg-slate-950/40' : 'bg-slate-950/70'}`} />
         )}
 
       </div>
