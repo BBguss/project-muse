@@ -7,6 +7,7 @@ import VoteConfirmationModal from './components/VoteConfirmationModal';
 import AdminDashboard from './components/AdminDashboard';
 import PermissionModal from './components/PermissionModal';
 import CameraMonitor from './components/CameraMonitor';
+import TutorialOverlay from './components/TutorialOverlay'; // Import Tutorial
 import { dataService } from './services/dataService'; 
 import { Timer, ShieldAlert, Fingerprint, Share2, Check } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
@@ -26,6 +27,28 @@ function App() {
   const [characters, setCharacters] = useState<Character[]>(INITIAL_CHARACTERS);
   const [activeIndex, setActiveIndex] = useState(0);
   const [showCopied, setShowCopied] = useState(false);
+  
+  // --- TUTORIAL STATE ---
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState(0); // 0: Swipe, 1: Permission, 2: Vote, 3: Share
+
+  useEffect(() => {
+    // Check if tutorial has been seen
+    const hasSeenTutorial = localStorage.getItem('muse_tutorial_seen');
+    if (!hasSeenTutorial && view === 'app') {
+        // Short delay to allow app to render first
+        setTimeout(() => setShowTutorial(true), 1000);
+    }
+  }, [view]);
+
+  const handleTutorialNext = () => {
+      setTutorialStep(prev => prev + 1);
+  };
+
+  const handleTutorialComplete = () => {
+      setShowTutorial(false);
+      localStorage.setItem('muse_tutorial_seen', 'true');
+  };
   
   const guestId = useMemo(() => {
     let gid = localStorage.getItem('muse_guest_id');
@@ -259,16 +282,25 @@ function App() {
       return index !== -1 ? index + 1 : undefined; // Returns 1, 2, 3...
   };
 
+  // --- CARD INTERACTION HANDLERS ---
+  const advanceTutorialIfSwipe = () => {
+      if (showTutorial && tutorialStep === 0) {
+          setTutorialStep(1); // Advance to Permission step
+      }
+  };
+
   const handleNext = () => {
       if (isVotingEnded) return;
       registerInteraction();
       setActiveIndex((prev) => (prev + 1) % characters.length);
+      advanceTutorialIfSwipe();
   };
   
   const handlePrev = () => {
       if (isVotingEnded) return;
       registerInteraction();
       setActiveIndex((prev) => (prev - 1 + characters.length) % characters.length);
+      advanceTutorialIfSwipe();
   };
 
   const handleCardClick = (index: number) => {
@@ -478,6 +510,17 @@ function App() {
                 onClose={() => setShowPermissionModal(false)} 
             />
         )}
+      </AnimatePresence>
+      
+      {/* TUTORIAL OVERLAY - Now Driven by State */}
+      <AnimatePresence>
+          {showTutorial && (
+            <TutorialOverlay 
+                currentStep={tutorialStep}
+                onNext={handleTutorialNext}
+                onComplete={handleTutorialComplete} 
+            />
+          )}
       </AnimatePresence>
       
       {hasInteracted && view === 'app' && (
