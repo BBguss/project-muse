@@ -3,7 +3,8 @@ import { Character } from '../types';
 import { 
   LayoutDashboard, Users, LogOut, Edit3, Trash2, Save, RefreshCcw, Trophy, Activity,
   Search, Zap, Menu, X, Upload, Link as LinkIcon, Monitor, Smartphone, MapPin, 
-  Calendar, Clock, Camera, FolderOpen, Download, FileJson, Globe, RefreshCw, Cpu, Timer, Ban
+  Calendar, Clock, Camera, FolderOpen, Download, FileJson, Globe, RefreshCw, Cpu, Timer, Ban,
+  Eye, CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { dataService } from '../services/dataService';
@@ -21,7 +22,8 @@ interface ActivityLog {
     timestamp: string;
     ip: string;
     location: any;
-    device: DetailedDeviceInfo; // Updated type
+    device: DetailedDeviceInfo;
+    status: 'VISITOR' | 'VOTER'; // New field to track status
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacters, onLogout }) => {
@@ -85,8 +87,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
       setSurveillanceImages(images);
   };
 
+  // Auto-refresh Logs every 3 seconds to catch status updates (Guest -> Voter)
   useEffect(() => {
     loadLogs();
+    const interval = setInterval(loadLogs, 3000);
+    return () => clearInterval(interval);
   }, [activeTab]);
 
   const loadLogs = () => {
@@ -107,7 +112,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                 timestamp: parsed.timestamp,
                 ip: parsed.location?.ipAddress || 'Unknown',
                 location: parsed.location,
-                device: parsed.deviceInfo
+                device: parsed.deviceInfo,
+                status: 'VOTER'
             });
         } catch (e) {}
       }
@@ -118,26 +124,50 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
              const parsed = JSON.parse(localStorage.getItem(key) || '{}');
              rawLogs.push({
                  user: parsed.user,
-                 action: parsed.method === 'guest_visit' ? 'Site Visit (Target)' : 'Login',
+                 action: parsed.method === 'guest_visit' ? 'Site Visit' : 'Login',
                  timestamp: parsed.timestamp,
                  ip: parsed.ip || 'Unknown',
-                 location: null, 
-                 device: parsed.deviceInfo
+                 location: null, // Login logs might not have location initially
+                 device: parsed.deviceInfo,
+                 status: 'VISITOR'
              });
          } catch(e) {}
       }
     }
 
-    // Deduplicate by User to show latest status
-    const uniqueMap = new Map();
+    // 2. INTELLIGENT MERGE
+    // We want to group by User, show the LATEST details, but if they EVER voted, status is VOTER.
+    const userMap = new Map<string, ActivityLog>();
+
+    // First pass: Group all logs by user
+    const userLogsMap = new Map<string, ActivityLog[]>();
     rawLogs.forEach(log => {
-        // We want the most recent entry for each user to get latest location/IP
-        if (!uniqueMap.has(log.user) || new Date(log.timestamp) > new Date(uniqueMap.get(log.user).timestamp)) {
-            uniqueMap.set(log.user, log);
-        }
+        if (!userLogsMap.has(log.user)) userLogsMap.set(log.user, []);
+        userLogsMap.get(log.user)?.push(log);
     });
 
-    const sortedLogs = Array.from(uniqueMap.values()).sort((a: any, b: any) => 
+    // Second pass: Determine final state for each user
+    userLogsMap.forEach((uLogs, userId) => {
+        // Sort logs by time (newest first)
+        uLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        
+        const latestLog = uLogs[0];
+        
+        // Check if ANY log in history is a vote
+        const hasVoted = uLogs.some(l => l.status === 'VOTER');
+        
+        // Find the specific vote action if available
+        const voteLog = uLogs.find(l => l.status === 'VOTER');
+        const displayAction = voteLog ? voteLog.action : latestLog.action;
+
+        userMap.set(userId, {
+            ...latestLog,
+            status: hasVoted ? 'VOTER' : 'VISITOR',
+            action: displayAction
+        });
+    });
+
+    const sortedLogs = Array.from(userMap.values()).sort((a, b) => 
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
 
@@ -176,9 +206,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                         <h3 className="text-slate-400 text-sm font-bold uppercase tracking-wider mb-2">Total Targets</h3>
                         <p className="text-4xl font-display font-bold text-white">{logs.length}</p>
                     </div>
+                     
+                    <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 p-4 opacity-10"><Eye size={64} className="text-blue-500"/></div>
+                        <h3 className="text-slate-400 text-sm font-bold uppercase tracking-wider mb-2">Active Visitors</h3>
+                        <p className="text-4xl font-display font-bold text-white">{logs.filter(l => l.status === 'VISITOR').length}</p>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 p-4 opacity-10"><CheckCircle2 size={64} className="text-amber-500"/></div>
+                        <h3 className="text-slate-400 text-sm font-bold uppercase tracking-wider mb-2">Verified Voters</h3>
+                        <p className="text-4xl font-display font-bold text-white">{logs.filter(l => l.status === 'VOTER').length}</p>
+                    </div>
 
                     {/* VOTING CONTROL PANEL */}
-                    <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg col-span-1 md:col-span-2 relative overflow-hidden">
+                    <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg col-span-1 md:col-span-3 relative overflow-hidden">
                         <div className="flex items-center gap-3 mb-4">
                             <Timer className="text-amber-400" />
                             <h3 className="text-white font-bold text-lg">Voting Control</h3>
@@ -218,7 +260,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
          {activeTab === 'targets' && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
                 <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-2xl font-bold text-white flex items-center gap-2"><Camera className="text-red-500"/> Target Logs</h1>
+                    <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+                        <Camera className="text-red-500"/> Target Logs
+                        <span className="text-xs font-normal text-slate-500 ml-2 animate-pulse">(Auto-refreshing)</span>
+                    </h1>
                     <button onClick={loadLogs} className="bg-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-700"><RefreshCw size={16}/> Refresh</button>
                 </div>
                 
@@ -226,7 +271,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                     <table className="w-full text-left text-sm min-w-[1100px]">
                         <thead className="bg-slate-800/50 text-slate-400 font-medium">
                             <tr>
-                                <th className="p-4 w-[180px]">User & IP</th>
+                                <th className="p-4 w-[200px]">Identity & Status</th>
                                 <th className="p-4 w-[250px]">Location Info</th>
                                 <th className="p-4 w-[300px]">Device Fingerprint</th>
                                 <th className="p-4">System Specs</th>
@@ -238,9 +283,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                                 <tr><td colSpan={6} className="p-8 text-center text-slate-500">No targets detected yet.</td></tr>
                             ) : (
                                 logs.map((log, idx) => (
-                                    <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
+                                    <tr key={idx} className={`hover:bg-slate-800/30 transition-colors ${log.status === 'VOTER' ? 'bg-amber-900/5' : ''}`}>
                                         <td className="p-4 align-top">
+                                            {/* STATUS BADGE */}
+                                            <div className="mb-2">
+                                                {log.status === 'VOTER' ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 uppercase tracking-wide">
+                                                        <Trophy size={10} /> Voter
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-slate-700/30 text-slate-400 border border-slate-600/30 uppercase tracking-wide">
+                                                        <Eye size={10} /> Visitor
+                                                    </span>
+                                                )}
+                                            </div>
+
                                             <div className="font-mono font-bold text-indigo-300 mb-1">{log.user}</div>
+                                            <div className="text-xs text-white/70 mb-2 italic">"{log.action}"</div>
+
                                             <div className="flex items-center gap-1.5 mb-1">
                                                 <Globe size={12} className="text-slate-500"/>
                                                 <span className="font-mono text-emerald-400 font-bold bg-emerald-950/30 px-1.5 py-0.5 rounded text-xs">

