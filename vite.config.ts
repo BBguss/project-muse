@@ -8,6 +8,20 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       host: true, // Allow access from network (important for NAS)
+      proxy: {
+        // Proxy API requests to backend
+        '/api': {
+          target: 'http://localhost:3001',
+          changeOrigin: true,
+          secure: false,
+        },
+        // Proxy uploaded images to backend
+        '/uploads': {
+          target: 'http://localhost:3001',
+          changeOrigin: true,
+          secure: false,
+        }
+      }
     },
     define: {
       'process.env.API_KEY': JSON.stringify(env.API_KEY || ''),

