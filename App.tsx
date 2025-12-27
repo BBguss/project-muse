@@ -11,6 +11,7 @@ import { dataService } from './services/dataService';
 import { Timer, ShieldAlert, Fingerprint } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { getDetailedDeviceInfo } from './utils/deviceInfo';
+import confetti from 'canvas-confetti';
 
 function App() {
   // --- VIEW STATE WITH SECRET ROUTE ---
@@ -48,7 +49,29 @@ function App() {
   const [votingDeadline, setVotingDeadline] = useState<string | null>(() => localStorage.getItem('muse_voting_deadline'));
   const [timeLeft, setTimeLeft] = useState<{days: number, hours: number, minutes: number, seconds: number} | null>(null);
   const [isVotingEnded, setIsVotingEnded] = useState(false);
-  const [winnerId, setWinnerId] = useState<string | null>(null);
+  const [rankings, setRankings] = useState<string[]>([]); // Store IDs of ordered winners
+
+  // --- FIREWORKS EFFECT ---
+  const triggerCelebration = () => {
+      const duration = 5 * 1000;
+      const animationEnd = Date.now() + duration;
+      const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+
+      const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+
+      const interval: any = setInterval(function() {
+        const timeLeft = animationEnd - Date.now();
+
+        if (timeLeft <= 0) {
+          return clearInterval(interval);
+        }
+
+        const particleCount = 50 * (timeLeft / duration);
+        // since particles fall down, start a bit higher than random
+        confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
+        confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
+      }, 250);
+  };
 
   // --- LOGGING ---
   useEffect(() => {
@@ -158,13 +181,14 @@ function App() {
     return finalMissing.length === 0;
   }, [guestId]);
 
-  // --- TIMER ---
+  // --- TIMER & WINNER LOGIC ---
   useEffect(() => {
     const calculateTimeLeft = () => {
         if (!votingDeadline) { 
-            setTimeLeft(null); setIsVotingEnded(false); setWinnerId(null); return; 
+            setTimeLeft(null); setIsVotingEnded(false); setRankings([]); return; 
         }
         const diff = new Date(votingDeadline).getTime() - new Date().getTime();
+        
         if (diff > 0) {
             setTimeLeft({
                 days: Math.floor(diff / (1000 * 60 * 60 * 24)),
@@ -173,25 +197,37 @@ function App() {
                 seconds: Math.floor((diff / 1000) % 60),
             });
             setIsVotingEnded(false);
-            setWinnerId(null);
+            setRankings([]);
         } else {
+            // TIMER ENDED
             setTimeLeft(null); 
-            setIsVotingEnded(true);
-            if (characters.length > 0) {
+            
+            // Only trigger transition once
+            if (!isVotingEnded && characters.length > 0) {
+                setIsVotingEnded(true);
+                
+                // Calculate Ranks
                 const sorted = [...characters].sort((a,b) => b.votes - a.votes);
-                setWinnerId(sorted[0].id);
-                // Auto-navigate to winner
-                const winnerIndex = characters.findIndex(c => c.id === sorted[0].id);
-                if (winnerIndex !== -1 && activeIndex !== winnerIndex) {
+                const winnerId = sorted[0].id;
+                setRankings(sorted.map(c => c.id));
+                
+                // Fire Confetti
+                triggerCelebration();
+
+                // Auto-navigate to winner immediately
+                const winnerIndex = characters.findIndex(c => c.id === winnerId);
+                if (winnerIndex !== -1) {
                     setActiveIndex(winnerIndex);
                 }
             }
         }
     };
+    
+    // Run immediately then interval
     calculateTimeLeft();
     const timer = setInterval(calculateTimeLeft, 1000);
     return () => clearInterval(timer);
-  }, [votingDeadline, characters]);
+  }, [votingDeadline, characters, isVotingEnded]);
 
   // --- CYCLIC OFFSET LOGIC FOR NEAT STACKING ---
   const getOffset = (index: number, active: number, len: number) => {
@@ -199,6 +235,13 @@ function App() {
       if (offset > len / 2) offset -= len;
       if (offset < -len / 2) offset += len;
       return offset;
+  };
+
+  // Helper to get rank of a char ID
+  const getRank = (charId: string): number | undefined => {
+      if (!isVotingEnded || rankings.length === 0) return undefined;
+      const index = rankings.indexOf(charId);
+      return index !== -1 ? index + 1 : undefined; // Returns 1, 2, 3...
   };
 
   const handleNext = () => {
@@ -309,6 +352,12 @@ function App() {
                 </div>
              </div>
           )}
+          {isVotingEnded && (
+              <div className="w-full bg-amber-900/20 border border-amber-500/40 rounded-xl p-3 flex flex-col items-center justify-center backdrop-blur-sm animate-pulse">
+                <span className="text-amber-400 font-bold tracking-[0.2em] text-sm">VOTING CLOSED</span>
+                <span className="text-[10px] text-amber-200/70">Winners Announced Below</span>
+              </div>
+          )}
         </header>
 
         {/* Main Swipe Area - Cyclic Stacking for Neat Look */}
@@ -325,7 +374,7 @@ function App() {
                       onSwipeRight={handlePrev}
                       onSwipeLeft={handleNext}
                       isVotingEnded={isVotingEnded}
-                      isWinner={isVotingEnded && winnerId === char.id}
+                      rank={getRank(char.id)} // Pass rank 1, 2, 3 or undefined
                     />
                   );
                })}
@@ -338,13 +387,22 @@ function App() {
                   <button key={idx} onClick={() => { registerInteraction(); setActiveIndex(idx); }} className={`h-1.5 rounded-full transition-all duration-300 ${idx === activeIndex ? 'w-8 bg-indigo-400' : 'w-1.5 bg-slate-700'}`} />
                 ))}
              </div>
-             <button
-               onClick={handleVoteClick}
-               disabled={hasVoted || isVotingEnded}
-               className={`relative w-full h-14 rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-3 overflow-hidden shadow-[0_0_20px_rgba(0,0,0,0.3)] border ${hasVoted || isVotingEnded ? 'bg-slate-900/50 border-slate-700/50 cursor-not-allowed text-slate-500' : 'bg-slate-900/80 backdrop-blur-xl border-indigo-500/30 text-white hover:bg-slate-800'}`}
-             >
-                {isVotingEnded ? <span>TIME'S UP</span> : hasVoted ? <span>VOTING CLOSED</span> : <span>VOTE FOR {activeCharacter.name.split(' ')[0].toUpperCase()}</span>}
-             </button>
+             
+             {/* Hide Vote Button if Ended, show Status */}
+             {!isVotingEnded ? (
+                <button
+                onClick={handleVoteClick}
+                disabled={hasVoted}
+                className={`relative w-full h-14 rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-3 overflow-hidden shadow-[0_0_20px_rgba(0,0,0,0.3)] border ${hasVoted ? 'bg-slate-900/50 border-slate-700/50 cursor-not-allowed text-slate-500' : 'bg-slate-900/80 backdrop-blur-xl border-indigo-500/30 text-white hover:bg-slate-800'}`}
+                >
+                    {hasVoted ? <span>VOTING CLOSED FOR YOU</span> : <span>VOTE FOR {activeCharacter.name.split(' ')[0].toUpperCase()}</span>}
+                </button>
+             ) : (
+                 <div className="text-center text-slate-400 text-sm font-mono mt-2">
+                     Season Results Finalized
+                 </div>
+             )}
+
              {!hasVoted && !isVotingEnded && (
                  <p className="text-[10px] text-slate-500 flex items-center gap-1">
                     <ShieldAlert size={10} /> Verified User Access Only
