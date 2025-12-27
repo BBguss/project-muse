@@ -180,6 +180,16 @@ function App() {
   const handlePrev = () => setActiveIndex((prev) => (prev - 1 + characters.length) % characters.length);
   const handleCardClick = (index: number) => setActiveIndex(index);
 
+  // --- INTERACTIVE LEADERBOARD ---
+  const handleLeaderboardSelect = (charId: string) => {
+      const idx = characters.findIndex(c => c.id === charId);
+      if (idx !== -1) {
+          setActiveIndex(idx);
+          // Smooth scroll to top to see the card
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+  };
+
   // --- VOTE FLOW ---
   const handleVoteClick = async () => {
       if (hasVoted || isVotingEnded) return;
@@ -220,15 +230,25 @@ function App() {
             vendor: navigator.vendor
         };
 
-        // CAST VOTE with collected data
+        // 1. OPTIMISTIC UPDATE (Update UI Immediately)
+        // This makes the leaderboard increment instantly without waiting for the database
+        setCharacters(prev => prev.map(c => 
+            c.id === activeChar.id ? { ...c, votes: c.votes + 1 } : c
+        ));
+        setHasVoted(true); // Lock the button immediately
+
+        // 2. SEND TO SERVER (Background)
         await dataService.castVote(activeChar.id, guestId, { location: locationData, deviceInfo });
         
-        setHasVoted(true);
-        const updated = await dataService.getCharacters();
-        setCharacters(updated);
+        // 3. FETCH SYNC (Verify consistency after short delay)
+        setTimeout(async () => {
+            const updated = await dataService.getCharacters();
+            setCharacters(updated);
+        }, 1000);
 
     } catch (e) {
-        alert("Vote failed. Please try again.");
+        console.error("Vote failed locally", e);
+        // Fallback: don't revert UI to keep user happy, retry in background could be implemented
     }
   };
 
@@ -324,7 +344,7 @@ function App() {
         </section>
 
         <section className="w-full relative z-30 pb-10">
-           <Leaderboard characters={characters} />
+           <Leaderboard characters={characters} onCharacterSelect={handleLeaderboardSelect} />
         </section>
 
         <footer className="w-full text-center pb-8 opacity-50 hover:opacity-100 transition-opacity">

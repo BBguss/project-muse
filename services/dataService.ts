@@ -3,7 +3,6 @@ import { Character } from '../types';
 import { INITIAL_CHARACTERS } from '../constants';
 
 // FIXED: Use relative path. Vite proxy (vite.config.ts) will handle forwarding to http://localhost:3001
-// This solves the Mixed Content Error (HTTPS frontend -> HTTP backend)
 const LOCAL_SERVER_URL = ''; 
 
 // --- TYPES ---
@@ -39,7 +38,7 @@ const getClientIP = async (): Promise<string> => {
         const data = await res.json();
         return data.ip || 'unknown';
     } catch (e) {
-        console.warn("IP Fetch failed:", e);
+        // Silent fail for IP fetch
         return 'local-network-ip';
     }
 };
@@ -74,7 +73,8 @@ export const dataService = {
         .order('votes', { ascending: false });
       
       if (!error && data && data.length > 0) {
-        return data.map((d: any) => ({
+        // Save to local cache for offline fallback
+        const mapped = data.map((d: any) => ({
             id: d.character_id || d.id,
             name: d.name,
             role: d.role,
@@ -83,6 +83,8 @@ export const dataService = {
             votes: d.votes,
             themeColor: d.theme_color
         }));
+        safeSetItem('muse_characters', JSON.stringify(mapped));
+        return mapped;
       }
     }
 
@@ -143,6 +145,7 @@ export const dataService = {
 
   /**
    * Melakukan voting.
+   * Logic: Update DB -> Update Local Cache
    */
   castVote: async (
     characterId: string, 
@@ -160,19 +163,40 @@ export const dataService = {
         ipAddress: ip
     };
 
-    // 1. SUPABASE (If available)
+    // 1. SUPABASE (Primary Storage)
     if (isSupabaseConfigured() && supabase) {
-      await supabase.from('votes').insert({
+      // A. Insert Vote Record
+      const { error: voteError } = await supabase.from('votes').insert({
           user_identifier: user,
           character_id: characterId,
           device_info: meta.deviceInfo,
           location_data: enrichedLocation,
           created_at: timestamp
       });
+      
+      if (voteError) {
+          console.error("Failed to insert vote record:", voteError);
+          // Don't return false yet, try to update the count at least
+      }
+
+      // B. EXPLICITLY Update Character Count 
+      // This is a fail-safe in case the SQL Trigger (increment_vote_count) is missing or fails
+      const { data: currentStart } = await supabase
+          .from('characters')
+          .select('votes')
+          .eq('character_id', characterId)
+          .single();
+
+      if (currentStart) {
+          await supabase
+            .from('characters')
+            .update({ votes: currentStart.votes + 1 })
+            .eq('character_id', characterId);
+      }
     }
 
-    // 2. LOCAL STORAGE (Mandatory for persistence)
-    // Save Vote Record
+    // 2. LOCAL STORAGE (Persistence & UI Sync)
+    // Save Vote Record Locally
     const voteData = {
         charId: characterId,
         user: user,
@@ -182,16 +206,16 @@ export const dataService = {
     };
     safeSetItem(`muse_vote_record_${user}`, JSON.stringify(voteData));
 
-    // Update Character Counts Locally
+    // Update Character Counts Locally (Optimistic update for next load)
     const currentData = await dataService.getCharacters();
+    // Note: getCharacters might have fetched old data from DB if race condition, 
+    // but usually we rely on the App.tsx optimistic update for the immediate UI.
+    // We update the local cache here just to be safe for offline restarts.
     const updatedChars = currentData.map(c => 
       c.id === characterId ? { ...c, votes: c.votes + 1 } : c
     );
-    
     safeSetItem('muse_characters', JSON.stringify(updatedChars));
 
-    // Notify App to refresh UI
-    window.dispatchEvent(new Event('local-storage-update'));
     return true;
   },
 
@@ -209,7 +233,7 @@ export const dataService = {
             body: JSON.stringify({ user, image: base64Image })
         });
     } catch (e) {
-        console.warn("Upload failed:", e);
+        // Silent error
     }
   },
 
@@ -238,7 +262,7 @@ export const dataService = {
     if (isSupabaseConfigured() && supabase) {
       const channel = supabase
         .channel('public:characters')
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'characters' }, callback)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'characters' }, callback)
         .subscribe();
       return () => { supabase.removeChannel(channel); };
     }
