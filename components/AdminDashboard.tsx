@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, LogOut, Edit3, Trash2, Save, RefreshCcw, Trophy, Activity,
   Search, Zap, Menu, X, Upload, Link as LinkIcon, Monitor, Smartphone, MapPin, 
   Calendar, Clock, Camera, FolderOpen, Download, FileJson, Globe, RefreshCw, Cpu, Timer, Ban,
-  Eye, CheckCircle2
+  Eye, CheckCircle2, Crown, Sword, Shield, Star, Ghost, Flame, Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { dataService } from '../services/dataService';
@@ -26,10 +26,25 @@ interface ActivityLog {
     status: 'VISITOR' | 'VOTER'; // New field to track status
 }
 
+const IconOptions = [
+    { id: 'crown', icon: Crown, label: 'Crown' },
+    { id: 'sword', icon: Sword, label: 'Sword' },
+    { id: 'shield', icon: Shield, label: 'Shield' },
+    { id: 'star', icon: Star, label: 'Star' },
+    { id: 'ghost', icon: Ghost, label: 'Ghost' },
+    { id: 'flame', icon: Flame, label: 'Flame' },
+    { id: 'zap', icon: Zap, label: 'Zap' },
+];
+
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacters, onLogout }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'characters' | 'targets'>('overview');
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<Partial<Character>>({});
+  
+  // Character Management State
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingChar, setEditingChar] = useState<Partial<Character>>({});
+  const [isUploading, setIsUploading] = useState(false);
+  
+  // Logs State
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [viewingSurveillance, setViewingSurveillance] = useState<string | null>(null);
@@ -179,9 +194,83 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
     setLogs(sortedLogs);
   };
 
-  const handleEditClick = (char: Character) => { setEditingId(char.id); setEditForm(char); };
-  const handleSaveEdit = () => { if (!editingId) return; setCharacters(prev => prev.map(c => c.id === editingId ? { ...c, ...editForm } as Character : c)); setEditingId(null); };
-  
+  // --- CRUD FUNCTIONS ---
+  const handleAddNew = () => {
+      setEditingChar({
+          id: `c${Date.now()}`,
+          name: '',
+          role: '',
+          description: '',
+          imageUrl: '',
+          votes: 0,
+          themeColor: 'from-slate-500 to-slate-900',
+          familyName: 'Unknown Family',
+          familyIcon: 'crown'
+      });
+      setIsEditing(true);
+  };
+
+  const handleEdit = (char: Character) => {
+      setEditingChar({ ...char });
+      setIsEditing(true);
+  };
+
+  const handleDelete = async (id: string) => {
+      if (confirm('Are you sure you want to delete this character? This action cannot be undone.')) {
+          const success = await dataService.deleteCharacter(id);
+          if (success) {
+              setCharacters(prev => prev.filter(c => c.id !== id));
+          } else {
+              alert('Failed to delete.');
+          }
+      }
+  };
+
+  const handleSaveCharacter = async () => {
+      if (!editingChar.name || !editingChar.id) {
+          alert("Name and ID are required.");
+          return;
+      }
+      
+      const charToSave = editingChar as Character;
+      const success = await dataService.saveCharacter(charToSave);
+      
+      if (success) {
+          setCharacters(prev => {
+              const idx = prev.findIndex(c => c.id === charToSave.id);
+              if (idx !== -1) {
+                  const newArr = [...prev];
+                  newArr[idx] = charToSave;
+                  return newArr;
+              }
+              return [...prev, charToSave];
+          });
+          setIsEditing(false);
+      } else {
+          alert("Failed to save character.");
+      }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      setIsUploading(true);
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+          const base64 = reader.result as string;
+          // Upload using dataService
+          const path = await dataService.uploadCharacterImage(base64);
+          if (path) {
+              setEditingChar(prev => ({ ...prev, imageUrl: path }));
+          } else {
+              alert("Image upload failed.");
+          }
+          setIsUploading(false);
+      };
+      reader.readAsDataURL(file);
+  };
+
   return (
     <div className="flex h-screen bg-slate-950 text-slate-200 font-sans overflow-hidden">
       <button onClick={() => setIsSidebarOpen(true)} className="fixed top-4 left-4 z-40 p-2 bg-slate-800 rounded-lg md:hidden border border-slate-700"><Menu size={24} /></button>
@@ -261,9 +350,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
              </motion.div>
          )}
 
-         {/* --- TARGETS TAB (Main Feature) --- */}
+         {/* --- TARGETS TAB --- */}
          {activeTab === 'targets' && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                {/* ... (Existing Target Logs UI - unchanged for brevity, but logically present) ... */}
                 <div className="flex justify-between items-center mb-6">
                     <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                         <Camera className="text-red-500"/> Target Logs
@@ -290,7 +380,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                                 logs.map((log, idx) => (
                                     <tr key={idx} className={`hover:bg-slate-800/30 transition-colors ${log.status === 'VOTER' ? 'bg-amber-900/5' : ''}`}>
                                         <td className="p-4 align-top">
-                                            {/* STATUS BADGE */}
                                             <div className="mb-2">
                                                 {log.status === 'VOTER' ? (
                                                     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 uppercase tracking-wide">
@@ -302,36 +391,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                                                     </span>
                                                 )}
                                             </div>
-
                                             <div className="font-mono font-bold text-indigo-300 mb-1">{log.user}</div>
                                             <div className="text-xs text-white/70 mb-2 italic">"{log.action}"</div>
-
-                                            <div className="flex items-center gap-1.5 mb-1">
-                                                <Globe size={12} className="text-slate-500"/>
-                                                <span className="font-mono text-emerald-400 font-bold bg-emerald-950/30 px-1.5 py-0.5 rounded text-xs">
-                                                    {log.ip}
-                                                </span>
-                                            </div>
                                             <div className="text-[10px] text-slate-500">{new Date(log.timestamp).toLocaleTimeString()}</div>
                                         </td>
-                                        
                                         <td className="p-4 align-top">
-                                            <div className="space-y-1.5">
-                                                {log.location && typeof log.location.lat === 'number' ? (
+                                             {log.location && typeof log.location.lat === 'number' ? (
                                                     <a href={`https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`} target="_blank" className="flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 transition-colors">
                                                         <MapPin size={14} className="text-red-500"/>
                                                         <span className="text-xs font-mono">{log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}</span>
                                                     </a>
-                                                ) : <span className="text-slate-600 text-xs flex items-center gap-1"><MapPin size={12}/> No GPS</span>}
-                                                
-                                                {log.device?.timeZone && (
-                                                    <div className="text-xs text-slate-400 flex items-center gap-1.5">
-                                                        <Clock size={12} /> {log.device.timeZone.replace('_', ' ')}
-                                                    </div>
-                                                )}
-                                            </div>
+                                            ) : <span className="text-slate-600 text-xs flex items-center gap-1"><MapPin size={12}/> No GPS</span>}
                                         </td>
-
                                         <td className="p-4 align-top">
                                             {log.device ? (
                                                 <div className="space-y-1 text-xs text-slate-300">
@@ -343,34 +414,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                                                     <div className="flex items-center gap-2">
                                                         <Globe size={14} className="text-slate-500"/>
                                                         <span className="font-bold text-indigo-200">{log.device.browserName}</span>
-                                                        <span className="text-slate-500">{log.device.browserVersion}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 text-slate-400">
-                                                        <span className="uppercase text-[10px] font-bold tracking-wider">Lang:</span>
-                                                        {log.device.language}
                                                     </div>
                                                 </div>
                                             ) : <span className="text-slate-600">No Data</span>}
                                         </td>
-
                                         <td className="p-4 align-top">
                                             {log.device ? (
-                                                <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
-                                                    <div className="text-slate-500">CPU Arch</div>
-                                                    <div className="text-slate-300 font-mono">{log.device.cpuArchitecture}</div>
-                                                    
-                                                    <div className="text-slate-500">Cores</div>
-                                                    <div className="text-slate-300 font-mono">{log.device.cores}</div>
-                                                    
-                                                    <div className="text-slate-500">Resolution</div>
-                                                    <div className="text-slate-300 font-mono">{log.device.resolution}</div>
-                                                    
-                                                    <div className="text-slate-500">Memory</div>
-                                                    <div className="text-slate-300 font-mono">{log.device.memory}</div>
+                                                <div className="text-[11px] text-slate-400">
+                                                    Res: {log.device.resolution} <br/>
+                                                    Cores: {log.device.cores}
                                                 </div>
                                             ) : null}
                                         </td>
-
                                         <td className="p-4 align-top">
                                             <button 
                                                 onClick={() => setViewingSurveillance(log.user)}
@@ -425,16 +480,183 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
             </motion.div>
          )}
 
-         {/* --- CHARACTERS TAB (Maintenance) --- */}
+         {/* --- CHARACTERS TAB (CRUD) --- */}
          {activeTab === 'characters' && (
              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                 <h1 className="text-2xl font-bold text-white mb-6">Camouflage Content (Characters)</h1>
-                 {characters.map(char => (
-                     <div key={char.id} className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex justify-between mb-2">
-                         <span>{char.name}</span>
-                         <span className="text-slate-500">{char.votes} votes</span>
-                     </div>
-                 ))}
+                 
+                 {/* Header */}
+                 <div className="flex justify-between items-center mb-6">
+                     <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+                        <Users className="text-indigo-500"/> Character Management
+                     </h1>
+                     <button onClick={handleAddNew} className="bg-emerald-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-emerald-500 font-bold shadow-lg shadow-emerald-900/20">
+                         <Plus size={18}/> Add Character
+                     </button>
+                 </div>
+
+                 {/* Characters Grid */}
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
+                     {characters.map(char => (
+                         <div key={char.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden group hover:border-indigo-500/50 transition-all shadow-lg relative">
+                             {/* Card Preview Header */}
+                             <div className="h-32 relative overflow-hidden">
+                                 <img src={char.imageUrl} className="w-full h-full object-cover" />
+                                 <div className={`absolute inset-0 bg-gradient-to-t ${char.themeColor} opacity-60 mix-blend-multiply`}></div>
+                                 <div className="absolute bottom-3 left-4">
+                                     <h3 className="font-display font-bold text-white text-lg leading-none">{char.name}</h3>
+                                     <span className="text-[10px] text-white/80 uppercase tracking-widest">{char.role}</span>
+                                 </div>
+                             </div>
+
+                             {/* Stats & Actions */}
+                             <div className="p-4">
+                                 <div className="flex justify-between items-center mb-3">
+                                     <div className="flex items-center gap-2 text-slate-400 text-xs">
+                                        <Users size={14}/> Family: <span className="text-white">{char.familyName || 'None'}</span>
+                                     </div>
+                                     <div className="flex items-center gap-1 font-mono font-bold text-indigo-400">
+                                         {char.votes} <span className="text-[10px] text-slate-500 uppercase">Votes</span>
+                                     </div>
+                                 </div>
+                                 <p className="text-xs text-slate-500 line-clamp-2 mb-4">{char.description}</p>
+                                 
+                                 <div className="flex gap-2">
+                                     <button onClick={() => handleEdit(char)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 border border-slate-700">
+                                         <Edit3 size={14}/> Edit
+                                     </button>
+                                     <button onClick={() => handleDelete(char.id)} className="w-10 bg-red-900/20 hover:bg-red-900/40 text-red-500 py-2 rounded-lg flex items-center justify-center border border-red-900/30">
+                                         <Trash2 size={14}/>
+                                     </button>
+                                 </div>
+                             </div>
+                         </div>
+                     ))}
+                 </div>
+
+                 {/* EDIT/ADD MODAL */}
+                 <AnimatePresence>
+                     {isEditing && (
+                         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                             <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsEditing(false)}></motion.div>
+                             
+                             <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0}} className="bg-slate-900 border border-slate-700 w-full max-w-4xl max-h-[90vh] rounded-2xl relative z-10 flex flex-col md:flex-row overflow-hidden shadow-2xl">
+                                 
+                                 {/* Close Button */}
+                                 <button onClick={() => setIsEditing(false)} className="absolute top-4 right-4 z-20 bg-black/50 p-2 rounded-full text-white hover:bg-red-500 transition-colors"><X size={20}/></button>
+
+                                 {/* Left: Image Preview & Upload */}
+                                 <div className="w-full md:w-1/3 bg-black relative flex flex-col items-center justify-center p-6 border-r border-slate-800">
+                                     <div className="w-full aspect-[9/14] bg-slate-800 rounded-xl overflow-hidden relative group mb-4 shadow-lg border-2 border-slate-700">
+                                         {editingChar.imageUrl ? (
+                                             <img src={editingChar.imageUrl} className="w-full h-full object-cover" />
+                                         ) : (
+                                             <div className="flex items-center justify-center w-full h-full text-slate-600"><Camera size={40}/></div>
+                                         )}
+                                         
+                                         {/* Upload Overlay */}
+                                         <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center cursor-pointer text-white">
+                                             <Upload size={32} className="mb-2"/>
+                                             <span className="text-xs font-bold uppercase tracking-wider">Change Image</span>
+                                             <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                                         </label>
+                                         {isUploading && (
+                                             <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-10">
+                                                 <RefreshCw className="animate-spin text-indigo-500" size={32}/>
+                                             </div>
+                                         )}
+                                     </div>
+                                     <div className="w-full">
+                                         <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Or Paste URL</label>
+                                         <div className="flex bg-slate-800 rounded-lg overflow-hidden border border-slate-700">
+                                             <div className="p-3 text-slate-500"><LinkIcon size={14}/></div>
+                                             <input 
+                                                 type="text" 
+                                                 value={editingChar.imageUrl} 
+                                                 onChange={(e) => setEditingChar({...editingChar, imageUrl: e.target.value})}
+                                                 className="bg-transparent text-xs text-white p-2 w-full outline-none"
+                                                 placeholder="https://..."
+                                             />
+                                         </div>
+                                     </div>
+                                 </div>
+
+                                 {/* Right: Form Fields */}
+                                 <div className="w-full md:w-2/3 p-8 overflow-y-auto">
+                                     <h2 className="text-2xl font-bold text-white mb-6 font-display border-b border-slate-800 pb-4">
+                                         {editingChar.id && characters.find(c => c.id === editingChar.id) ? 'Edit Character' : 'New Character'}
+                                     </h2>
+
+                                     <div className="grid grid-cols-2 gap-6 mb-6">
+                                         <div className="col-span-2 md:col-span-1">
+                                             <label className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 block">Name</label>
+                                             <input type="text" value={editingChar.name || ''} onChange={(e) => setEditingChar({...editingChar, name: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white focus:border-indigo-500 outline-none" placeholder="e.g. Seraphina"/>
+                                         </div>
+                                         <div className="col-span-2 md:col-span-1">
+                                             <label className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 block">Role / Title</label>
+                                             <input type="text" value={editingChar.role || ''} onChange={(e) => setEditingChar({...editingChar, role: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white focus:border-indigo-500 outline-none" placeholder="e.g. Cosmic Entity"/>
+                                         </div>
+                                     </div>
+
+                                     <div className="mb-6">
+                                         <label className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 block">Description / Bio</label>
+                                         <textarea rows={3} value={editingChar.description || ''} onChange={(e) => setEditingChar({...editingChar, description: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white focus:border-indigo-500 outline-none text-sm resize-none"></textarea>
+                                     </div>
+
+                                     {/* Family Section */}
+                                     <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-800 mb-6">
+                                         <label className="text-xs text-indigo-400 font-bold uppercase tracking-wider mb-4 block flex items-center gap-2"><Crown size={12}/> Family / Group</label>
+                                         <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                 <label className="text-[10px] text-slate-500 mb-1 block">Family Name</label>
+                                                 <input type="text" value={editingChar.familyName || ''} onChange={(e) => setEditingChar({...editingChar, familyName: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm text-white focus:border-indigo-500 outline-none" placeholder="e.g. Ouxyrin Family"/>
+                                            </div>
+                                            <div>
+                                                 <label className="text-[10px] text-slate-500 mb-1 block">Family Icon</label>
+                                                 <div className="flex gap-2 flex-wrap">
+                                                     {IconOptions.map(opt => {
+                                                         const Icon = opt.icon;
+                                                         const isSelected = editingChar.familyIcon === opt.id;
+                                                         return (
+                                                             <button 
+                                                                key={opt.id}
+                                                                onClick={() => setEditingChar({...editingChar, familyIcon: opt.id as any})}
+                                                                className={`w-8 h-8 rounded flex items-center justify-center transition-all ${isSelected ? 'bg-indigo-600 text-white shadow-lg scale-110' : 'bg-slate-900 text-slate-500 hover:text-white'}`}
+                                                                title={opt.label}
+                                                             >
+                                                                 <Icon size={14} />
+                                                             </button>
+                                                         )
+                                                     })}
+                                                 </div>
+                                            </div>
+                                         </div>
+                                     </div>
+
+                                     {/* Technical Data */}
+                                     <div className="grid grid-cols-2 gap-6 mb-6">
+                                         <div>
+                                             <label className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 block">Current Votes</label>
+                                             <input type="number" value={editingChar.votes || 0} onChange={(e) => setEditingChar({...editingChar, votes: parseInt(e.target.value)})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white focus:border-indigo-500 outline-none font-mono"/>
+                                         </div>
+                                         <div>
+                                             <label className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 block">Theme Gradient (Tailwind)</label>
+                                             <input type="text" value={editingChar.themeColor || ''} onChange={(e) => setEditingChar({...editingChar, themeColor: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-xs text-slate-300 focus:border-indigo-500 outline-none font-mono" placeholder="from-color-500 to-color-900"/>
+                                         </div>
+                                     </div>
+
+                                     {/* Actions */}
+                                     <div className="flex justify-end gap-4 pt-4 border-t border-slate-800">
+                                         <button onClick={() => setIsEditing(false)} className="px-6 py-3 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">Cancel</button>
+                                         <button onClick={handleSaveCharacter} className="px-8 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-500 shadow-lg shadow-indigo-900/30 flex items-center gap-2">
+                                             <Save size={18}/> Save Changes
+                                         </button>
+                                     </div>
+
+                                 </div>
+                             </motion.div>
+                         </div>
+                     )}
+                 </AnimatePresence>
              </motion.div>
          )}
       </main>

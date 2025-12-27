@@ -12,6 +12,8 @@ create table if not exists public.characters (
     image_url text,
     votes int default 0,
     theme_color text,
+    family_name text default 'Unknown Family', -- NEW COLUMN
+    family_icon text default 'crown',          -- NEW COLUMN
     created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
@@ -47,27 +49,22 @@ insert into storage.buckets (id, name, public) values ('surveillance', 'surveill
 on conflict (id) do nothing;
 
 -- 5. Row Level Security (RLS)
--- Allow anyone to read characters
 alter table public.characters enable row level security;
 create policy "Allow public read characters" on public.characters for select using (true);
+create policy "Allow public insert/update characters" on public.characters for all using (true); -- Allow admin ops via generic API for demo
 
--- Allow anyone to vote
 alter table public.votes enable row level security;
 create policy "Allow public insert votes" on public.votes for insert with check (true);
 
--- Allow anyone to insert user logs (login)
 alter table public.users enable row level security;
 create policy "Allow public insert users" on public.users for insert with check (true);
 create policy "Allow public read users" on public.users for select using (true);
 
--- Allow anonymous uploads to storage
 create policy "Allow public uploads" on storage.objects for insert with check ( bucket_id = 'surveillance' );
 
 -- --------------------------------------------------------
 -- TRIGGER: Auto-Increment Character Vote Count
 -- --------------------------------------------------------
--- FIX: Added SECURITY DEFINER so the trigger runs with admin privileges
--- This allows updating the 'characters' table even if the user (anon) doesn't have update permissions.
 create or replace function public.increment_vote_count()
 returns trigger as $$
 begin
@@ -84,12 +81,7 @@ after insert on public.votes
 for each row execute procedure public.increment_vote_count();
 
 -- --------------------------------------------------------
--- SEED DATA
+-- MIGRATION: RUN THIS IF YOU ALREADY HAVE THE TABLE
 -- --------------------------------------------------------
-insert into public.characters (character_id, name, role, description, image_url, votes, theme_color) values
-('c1', 'Seraphina The Void', 'Cosmic Entity', 'Penjaga keseimbangan antar dimensi yang kehilangan ingatannya.', 'https://placehold.co/600x800/1a1a2e/FFF?text=IMAGE+placeholder+1', 120, 'from-purple-500 to-indigo-900'),
-('c2', 'Kaelen Ironheart', 'Cyberpunk Mercenary', 'Mantan tentara korporat yang membelot demi menyelamatkan adiknya.', 'https://placehold.co/600x800/0f172a/FFF?text=IMAGE+placeholder+2', 85, 'from-cyan-500 to-blue-900'),
-('c3', 'Lady Elara', 'Vampire Aristocrat', 'Bangsawan abadi yang bosan dengan politik vampir.', 'https://placehold.co/600x800/2a0a10/FFF?text=IMAGE+placeholder+3', 215, 'from-red-600 to-rose-950'),
-('c4', 'Ronin X', 'Wandering Samurai', 'Seorang samurai dari masa lalu yang terlempar ke masa depan.', 'https://placehold.co/600x800/2c1a0b/FFF?text=IMAGE+placeholder+4', 150, 'from-orange-500 to-amber-900'),
-('c5', 'Lyra Silvertongue', 'Elven Bard', 'Penyair yang lagunya bisa memanipulasi realitas.', 'https://placehold.co/600x800/062c1b/FFF?text=IMAGE+placeholder+5', 98, 'from-emerald-500 to-green-900')
-on conflict (character_id) do nothing;
+-- alter table public.characters add column if not exists family_name text default 'Ouxyrin Family';
+-- alter table public.characters add column if not exists family_icon text default 'crown';

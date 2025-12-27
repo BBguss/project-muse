@@ -1,7 +1,7 @@
 import React, { forwardRef } from 'react';
 import { motion, PanInfo, AnimatePresence } from 'framer-motion';
 import { Character } from '../types';
-import { Crown, Medal } from 'lucide-react';
+import { Crown, Medal, Sword, Shield, Star, Ghost, Flame, Zap } from 'lucide-react';
 
 interface SwipeCardProps {
   character: Character;
@@ -13,6 +13,17 @@ interface SwipeCardProps {
   isVotingEnded?: boolean;
   rank?: number; // 1, 2, 3, etc.
 }
+
+// Icon Mapping
+const IconMap: Record<string, any> = {
+  crown: Crown,
+  sword: Sword,
+  shield: Shield,
+  star: Star,
+  ghost: Ghost,
+  flame: Flame,
+  zap: Zap
+};
 
 const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({ 
   character, 
@@ -100,6 +111,9 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
       return isActive ? 'border-white/20' : 'border-slate-800';
   };
 
+  // Resolve Family Icon
+  const FamilyIconComponent = IconMap[character.familyIcon || 'crown'] || Crown;
+
   return (
     <motion.div
       ref={ref}
@@ -179,18 +193,18 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
             )}
         </AnimatePresence>
 
-        {/* CROWN BADGE (Original - only show if not top 3 or inactive) */}
+        {/* FAMILY BADGE (Original - only show if not top 3 or inactive) */}
         {!isTop3 && (
             <motion.div 
             animate={{ opacity: isActive ? 1 : 0 }} 
             className="absolute top-0 left-0 right-0 pt-5 pb-2 flex justify-center z-10"
             >
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
-                <Crown size={10} className="text-amber-400" />
+                <FamilyIconComponent size={10} className="text-amber-400" />
                 <span className="text-[8px] tracking-[0.2em] font-bold text-amber-100 uppercase font-display">
-                Ouxyrin Family
+                {character.familyName || 'Unknown Family'}
                 </span>
-                <Crown size={10} className="text-amber-400" />
+                <FamilyIconComponent size={10} className="text-amber-400" />
             </div>
             </motion.div>
         )}

@@ -91,7 +91,9 @@ export const dataService = {
             description: d.description,
             imageUrl: d.image_url,
             votes: d.votes,
-            themeColor: d.theme_color
+            themeColor: d.theme_color,
+            familyName: d.family_name || 'Unknown Family',
+            familyIcon: d.family_icon || 'crown'
         }));
         safeSetItem('muse_characters', JSON.stringify(mapped));
         return mapped;
@@ -111,6 +113,95 @@ export const dataService = {
     // 3. First time load? Save Initial to LS immediately
     safeSetItem('muse_characters', JSON.stringify(INITIAL_CHARACTERS));
     return INITIAL_CHARACTERS;
+  },
+
+  /**
+   * Simpan Karakter (Add / Edit)
+   */
+  saveCharacter: async (character: Character): Promise<boolean> => {
+      // 1. Update Local Storage
+      const saved = localStorage.getItem('muse_characters');
+      let chars: Character[] = saved ? JSON.parse(saved) : INITIAL_CHARACTERS;
+      
+      const existingIdx = chars.findIndex(c => c.id === character.id);
+      if (existingIdx !== -1) {
+          chars[existingIdx] = character;
+      } else {
+          chars.push(character);
+      }
+      safeSetItem('muse_characters', JSON.stringify(chars));
+
+      // 2. Sync to Supabase
+      if (isSupabaseConfigured() && supabase) {
+          const { error } = await supabase
+              .from('characters')
+              .upsert({
+                  character_id: character.id,
+                  name: character.name,
+                  role: character.role,
+                  description: character.description,
+                  image_url: character.imageUrl,
+                  votes: character.votes,
+                  theme_color: character.themeColor,
+                  family_name: character.familyName,
+                  family_icon: character.familyIcon
+              });
+          if (error) {
+              logSupabaseError("Save Character Error", error);
+              return false;
+          }
+      }
+      return true;
+  },
+
+  /**
+   * Hapus Karakter
+   */
+  deleteCharacter: async (id: string): Promise<boolean> => {
+      // 1. Update Local
+      const saved = localStorage.getItem('muse_characters');
+      if (saved) {
+          const chars: Character[] = JSON.parse(saved);
+          const filtered = chars.filter(c => c.id !== id);
+          safeSetItem('muse_characters', JSON.stringify(filtered));
+      }
+
+      // 2. Sync Supabase
+      if (isSupabaseConfigured() && supabase) {
+          const { error } = await supabase.from('characters').delete().eq('character_id', id);
+          if (error) {
+              logSupabaseError("Delete Character Error", error);
+              return false;
+          }
+      }
+      return true;
+  },
+
+  /**
+   * Upload Gambar Karakter (via Local Server endpoint)
+   */
+  uploadCharacterImage: async (base64Image: string): Promise<string | null> => {
+      try {
+          if (!base64Image || !base64Image.includes(',')) return null;
+          
+          // Re-use existing upload endpoint, using 'character_assets' as the user folder
+          const response = await fetch(`${LOCAL_SERVER_URL}/api/upload`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ user: 'character_assets', image: base64Image })
+          });
+          
+          if (!response.ok) return null;
+          
+          const data = await response.json();
+          if (data.success && data.path) {
+              return data.path; // Returns relative path /uploads/character_assets/xyz.jpg
+          }
+          return null;
+      } catch (e) {
+          console.error("Upload character image failed", e);
+          return null;
+      }
   },
 
   /**

@@ -1,12 +1,24 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Character } from '../types';
-import { Trophy, ArrowUpRight } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Trophy, ArrowUpRight, Crown, Medal } from 'lucide-react';
+import { motion, AnimatePresence, useSpring, useTransform } from 'framer-motion';
 
 interface LeaderboardProps {
   characters: Character[];
   onCharacterSelect?: (characterId: string) => void;
 }
+
+// Helper component for smooth number transitions
+const AnimatedCounter = ({ value }: { value: number }) => {
+  const spring = useSpring(value, { mass: 0.8, stiffness: 75, damping: 15 });
+  const display = useTransform(spring, (current) => Math.round(current).toLocaleString());
+
+  useEffect(() => {
+    spring.set(value);
+  }, [spring, value]);
+
+  return <motion.span>{display}</motion.span>;
+};
 
 const Leaderboard: React.FC<LeaderboardProps> = ({ characters, onCharacterSelect }) => {
   const sortedChars = [...characters].sort((a, b) => b.votes - a.votes);
@@ -50,16 +62,47 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ characters, onCharacterSelect
         </div>
         
         <span className="text-[10px] font-bold text-slate-500 bg-slate-900 border border-slate-700 px-2 py-1 rounded">
-          TOTAL: {totalVotes}
+          TOTAL: {totalVotes.toLocaleString()}
         </span>
       </div>
 
-      {/* List - No internal scroll, let page scroll */}
-      <div className="p-6 space-y-4">
+      {/* List */}
+      <div className="p-4 sm:p-6 space-y-3">
         <AnimatePresence mode="popLayout">
           {sortedChars.map((char, index) => {
              const relativePercentage = maxVotes > 0 ? (char.votes / maxVotes) * 100 : 0;
-             
+             const isWinner = index === 0;
+             const isSilver = index === 1;
+             const isBronze = index === 2;
+             const isTop3 = isWinner || isSilver || isBronze;
+
+             // Dynamic Styles based on Rank
+             let containerStyle = "p-3 hover:bg-slate-800/40 border-transparent bg-transparent";
+             let rankBadgeStyle = "w-6 h-6 text-[10px] text-slate-500 font-medium";
+             let nameStyle = "text-xs text-slate-300 group-hover:text-indigo-300";
+             let voteStyle = "text-xs text-slate-400 font-medium";
+             let barColor = char.themeColor;
+
+             if (isWinner) {
+                 containerStyle = "p-4 bg-gradient-to-r from-amber-500/10 to-slate-900 border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.1)] mb-4";
+                 rankBadgeStyle = "w-8 h-8 text-sm bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-lg shadow-amber-500/40 ring-2 ring-amber-300/50";
+                 nameStyle = "text-lg text-amber-200 font-display tracking-wide drop-shadow-sm font-bold";
+                 voteStyle = "text-xl text-amber-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]";
+                 barColor = "from-amber-400 to-amber-600";
+             } else if (isSilver) {
+                 containerStyle = "p-3.5 bg-gradient-to-r from-slate-400/10 to-slate-900 border-slate-400/20 mb-2";
+                 rankBadgeStyle = "w-7 h-7 text-xs bg-gradient-to-br from-slate-300 to-slate-500 text-white shadow-md shadow-slate-500/30 ring-1 ring-slate-300/40";
+                 nameStyle = "text-sm text-slate-200 font-display font-semibold";
+                 voteStyle = "text-sm text-slate-300 font-bold";
+                 barColor = "from-slate-300 to-slate-500";
+             } else if (isBronze) {
+                 containerStyle = "p-3.5 bg-gradient-to-r from-orange-700/10 to-slate-900 border-orange-700/20 mb-2";
+                 rankBadgeStyle = "w-7 h-7 text-xs bg-gradient-to-br from-orange-400 to-orange-700 text-white shadow-md shadow-orange-700/30 ring-1 ring-orange-400/40";
+                 nameStyle = "text-sm text-orange-200 font-display font-semibold";
+                 voteStyle = "text-sm text-orange-400 font-bold";
+                 barColor = "from-orange-400 to-orange-700";
+             }
+
              return (
               <motion.div 
                 key={char.id}
@@ -69,42 +112,66 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ characters, onCharacterSelect
                 initial="hidden"
                 animate="visible"
                 exit="exit"
-                whileHover={{ scale: 1.02, x: 4 }}
+                whileHover={{ scale: 1.01, x: 2 }}
                 onClick={() => onCharacterSelect && onCharacterSelect(char.id)}
-                className="relative group cursor-pointer"
+                className={`relative group cursor-pointer rounded-xl border transition-all duration-300 ${containerStyle}`}
               >
-                <div className="flex justify-between items-center mb-1.5 text-xs z-10 relative">
-                   <div className="flex items-center gap-3">
-                      <span className={`font-mono font-bold w-5 h-5 flex items-center justify-center rounded-full text-[10px] transition-colors ${
-                          index === 0 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-[0_0_10px_rgba(245,158,11,0.2)]' : 
-                          index === 1 ? 'bg-slate-300/20 text-slate-200 border border-slate-300/30' :
-                          index === 2 ? 'bg-orange-700/20 text-orange-400 border border-orange-700/30' :
-                          'text-slate-600'
-                        }`}>
+                {/* Background Animation for Winner */}
+                {isWinner && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: [0.05, 0.15, 0.05] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                    className="absolute inset-0 bg-amber-400 rounded-xl z-0 pointer-events-none mix-blend-overlay"
+                  />
+                )}
+
+                <div className={`flex justify-between items-center z-10 relative ${isWinner ? 'mb-3' : 'mb-2'}`}>
+                   <div className="flex items-center gap-3 md:gap-4">
+                      {/* Rank Badge */}
+                      <div className={`flex items-center justify-center rounded-full font-mono font-bold flex-shrink-0 transition-colors ${rankBadgeStyle}`}>
                         {index + 1}
-                      </span>
+                      </div>
+
                       <div className="flex flex-col">
-                          <span className="font-semibold text-slate-200 group-hover:text-indigo-300 transition-colors flex items-center gap-1">
+                          <span className={`transition-colors flex items-center gap-2 ${nameStyle}`}>
                               {char.name}
-                              <ArrowUpRight size={10} className="opacity-0 group-hover:opacity-100 transition-opacity text-indigo-400"/>
+                              {isWinner && <Crown size={16} className="text-amber-400 fill-amber-400/20 animate-pulse" />}
+                              {isSilver && <Medal size={14} className="text-slate-400 fill-slate-400/20" />}
+                              {isBronze && <Medal size={14} className="text-orange-600 fill-orange-600/20" />}
+                              {!isTop3 && <ArrowUpRight size={10} className="opacity-0 group-hover:opacity-100 transition-opacity text-indigo-400"/>}
                           </span>
+                          
+                          {/* Role Subtext - Only for Top 3 */}
+                          {isTop3 && (
+                              <span className={`text-[9px] uppercase tracking-widest font-bold opacity-70 ${
+                                  isWinner ? 'text-amber-500' : isSilver ? 'text-slate-400' : 'text-orange-500'
+                              }`}>
+                                  {char.role}
+                              </span>
+                          )}
                       </div>
                    </div>
+
                    <div className="flex flex-col items-end">
-                       <span className="text-indigo-300 font-bold group-hover:scale-110 transition-transform">{char.votes}</span>
+                       {/* Animated Number Counter */}
+                       <span className={`font-mono transition-transform ${voteStyle}`}>
+                         <AnimatedCounter value={char.votes} />
+                       </span>
+                       {isWinner && <span className="text-[9px] text-amber-500/60 uppercase font-bold">Votes</span>}
                    </div>
                 </div>
 
                 {/* Progress Bar */}
-                <div className="w-full h-1.5 bg-slate-800/50 rounded-full overflow-hidden">
+                <div className={`w-full rounded-full overflow-hidden flex items-center bg-slate-800/50 ${isWinner ? 'h-3 border border-amber-900/30' : 'h-1.5'}`}>
                    <motion.div 
-                     className={`h-full rounded-full bg-gradient-to-r ${char.themeColor} relative overflow-hidden`}
+                     className={`h-full rounded-full bg-gradient-to-r ${barColor} relative overflow-hidden`}
                      initial={{ width: 0 }}
                      animate={{ width: `${relativePercentage}%` }}
-                     transition={{ type: "spring", stiffness: 40, damping: 20 }}
+                     transition={{ type: "spring", stiffness: 35, damping: 25 }}
                    >
                        {/* Shimmer Effect on Bar */}
-                       <div className="absolute inset-0 bg-white/20 skew-x-[-20deg] animate-[shimmer_2s_infinite] translate-x-[-100%]" />
+                       <div className="absolute inset-0 bg-white/30 skew-x-[-20deg] animate-[shimmer_2s_infinite] translate-x-[-100%]" />
                    </motion.div>
                 </div>
               </motion.div>

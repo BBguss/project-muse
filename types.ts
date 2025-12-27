@@ -6,6 +6,8 @@ export interface Character {
   imageUrl: string;
   votes: number;
   themeColor: string;
+  familyName?: string; // New: Nama Marga/Family
+  familyIcon?: 'crown' | 'sword' | 'shield' | 'star' | 'ghost' | 'flame' | 'zap'; // New: Icon identifier
 }
 
 export interface SwipeDirection {
