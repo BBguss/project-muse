@@ -28,6 +28,17 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 }
 
 /**
+ * GET /api/ip
+ * Return the requester's IP address (Useful for local network logging)
+ */
+app.get('/api/ip', (req, res) => {
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  // Normalize IPv6 mapped IPv4
+  const cleanIp = ip.replace('::ffff:', '');
+  res.json({ ip: cleanIp });
+});
+
+/**
  * POST /api/upload
  */
 app.post('/api/upload', (req, res) => {
@@ -83,7 +94,7 @@ app.get('/api/images/:user', (req, res) => {
       .filter(file => file.endsWith('.jpg') || file.endsWith('.png'))
       .map(file => ({
         filename: file,
-        url: `http://localhost:${PORT}/uploads/${safeUser}/${file}`,
+        url: `http://${req.headers.host}/uploads/${safeUser}/${file}`, // Use dynamic host
         timestamp: Number(file.split('.')[0]) || 0
       }))
       .sort((a, b) => b.timestamp - a.timestamp);
@@ -96,9 +107,10 @@ app.get('/api/images/:user', (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log('--------------------------------------------------');
   console.log(`Local Storage Server running at http://localhost:${PORT}`);
+  console.log(`Accepting connections from network devices.`);
   console.log(`Images saved in: ${UPLOAD_DIR}`);
   console.log('--------------------------------------------------');
 });

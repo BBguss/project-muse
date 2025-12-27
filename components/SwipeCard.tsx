@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { forwardRef } from 'react';
 import { motion, PanInfo, AnimatePresence } from 'framer-motion';
 import { Character } from '../types';
 import { Crown } from 'lucide-react';
@@ -12,14 +12,14 @@ interface SwipeCardProps {
   onSwipeRight: () => void;
 }
 
-const SwipeCard: React.FC<SwipeCardProps> = ({ 
+const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({ 
   character, 
   isActive, 
   offset, 
   onClick, 
   onSwipeLeft, 
   onSwipeRight, 
-}) => {
+}, ref) => {
   
   if (Math.abs(offset) > 2) return null;
 
@@ -84,6 +84,7 @@ const SwipeCard: React.FC<SwipeCardProps> = ({
 
   return (
     <motion.div
+      ref={ref}
       initial={false}
       animate={currentState}
       variants={variants}
@@ -164,6 +165,6 @@ const SwipeCard: React.FC<SwipeCardProps> = ({
       </div>
     </motion.div>
   );
-};
+});
 
 export default SwipeCard;
