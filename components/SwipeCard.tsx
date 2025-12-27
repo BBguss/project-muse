@@ -10,6 +10,8 @@ interface SwipeCardProps {
   onClick: () => void;
   onSwipeLeft: () => void;
   onSwipeRight: () => void;
+  isVotingEnded?: boolean;
+  isWinner?: boolean;
 }
 
 const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({ 
@@ -19,6 +21,8 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
   onClick, 
   onSwipeLeft, 
   onSwipeRight, 
+  isVotingEnded,
+  isWinner
 }, ref) => {
   
   if (Math.abs(offset) > 2) return null;
@@ -73,7 +77,7 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
   else if (offset > 1) currentState = 'farRight';
 
   const handleDragEnd = (_: any, info: PanInfo) => {
-    if (!isActive) return;
+    if (!isActive || isVotingEnded) return; // Disable drag if voting ended
     const swipeThreshold = 50;
     if (info.offset.x > swipeThreshold) {
       onSwipeRight();
@@ -93,11 +97,11 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
       className="absolute w-[72%] max-w-[280px] aspect-[9/14] cursor-pointer origin-bottom touch-none"
       onClick={onClick}
       style={{ perspective: 1000 }}
-      drag={isActive ? "x" : false}
+      drag={isActive && !isVotingEnded ? "x" : false} // Disable dragging if voting ended
       dragConstraints={{ left: 0, right: 0 }}
       dragElastic={0.25} // Increased elasticity for better feel
       onDragEnd={handleDragEnd}
-      whileTap={isActive ? { scale: 0.98, cursor: "grabbing" } : {}}
+      whileTap={isActive && !isVotingEnded ? { scale: 0.98, cursor: "grabbing" } : {}}
     >
       {/* Active Glow Effect */}
       <AnimatePresence>
@@ -114,6 +118,52 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
       {/* Main Card */}
       <div className={`w-full h-full rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden shadow-2xl bg-slate-900 border transition-all duration-500 relative group ${isActive ? 'border-white/20' : 'border-slate-800'}`}>
         
+        {/* WINNER OVERLAY - Only shown if voting ended AND this is the winner */}
+        <AnimatePresence>
+           {isWinner && (
+               <motion.div 
+                  initial={{ opacity: 0, scale: 1.5 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.5, ease: "backOut" }}
+                  className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-[2px] text-center p-4"
+               >
+                   <div className="relative">
+                       <motion.div 
+                         animate={{ y: [0, -10, 0] }}
+                         transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                       >
+                           <Crown size={80} className="text-amber-400 drop-shadow-[0_0_25px_rgba(245,158,11,0.6)] fill-amber-500/20" strokeWidth={1.5} />
+                       </motion.div>
+                       <motion.div
+                         initial={{ scale: 0 }}
+                         animate={{ scale: 1 }}
+                         transition={{ delay: 0.3 }}
+                         className="absolute -top-2 -right-2 rotate-12"
+                       >
+                           <Crown size={30} className="text-yellow-200 fill-yellow-200 animate-ping absolute opacity-50" />
+                           <Crown size={30} className="text-yellow-200 fill-yellow-200" />
+                       </motion.div>
+                   </div>
+                   
+                   <motion.h2 
+                      initial={{ y: 20, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ delay: 0.2 }}
+                      className="text-4xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-b from-amber-300 to-amber-600 mt-4 drop-shadow-sm tracking-widest"
+                   >
+                       WINNER
+                   </motion.h2>
+                   
+                   <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: "60%" }}
+                      transition={{ delay: 0.5, duration: 0.5 }}
+                      className="h-1 bg-amber-500 rounded-full mt-2"
+                   />
+               </motion.div>
+           )}
+        </AnimatePresence>
+
         {/* Badge - Top of Card */}
         <motion.div 
           animate={{ opacity: isActive ? 1 : 0 }} 

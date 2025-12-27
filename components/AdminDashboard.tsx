@@ -3,7 +3,7 @@ import { Character } from '../types';
 import { 
   LayoutDashboard, Users, LogOut, Edit3, Trash2, Save, RefreshCcw, Trophy, Activity,
   Search, Zap, Menu, X, Upload, Link as LinkIcon, Monitor, Smartphone, MapPin, 
-  Calendar, Clock, Camera, FolderOpen, Download, FileJson, Globe, RefreshCw, Cpu
+  Calendar, Clock, Camera, FolderOpen, Download, FileJson, Globe, RefreshCw, Cpu, Timer, Ban
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { dataService } from '../services/dataService';
@@ -32,6 +32,41 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [viewingSurveillance, setViewingSurveillance] = useState<string | null>(null);
   const [surveillanceImages, setSurveillanceImages] = useState<{timestamp: string, url: string}[]>([]);
+  
+  // Timer State
+  const [deadlineInput, setDeadlineInput] = useState('');
+
+  // Initialize deadline input from storage
+  useEffect(() => {
+    const stored = localStorage.getItem('muse_voting_deadline');
+    if (stored) {
+        // Format for datetime-local input: YYYY-MM-DDThh:mm
+        const date = new Date(stored);
+        const offset = date.getTimezoneOffset() * 60000;
+        const localISOTime = (new Date(date.getTime() - offset)).toISOString().slice(0, 16);
+        setDeadlineInput(localISOTime);
+    }
+  }, []);
+
+  const handleSaveTimer = () => {
+      if (!deadlineInput) return;
+      const dateStr = new Date(deadlineInput).toISOString();
+      localStorage.setItem('muse_voting_deadline', dateStr);
+      
+      // Dispatch event to update App.tsx immediately
+      window.dispatchEvent(new Event('local-storage-update'));
+      window.dispatchEvent(new Event('storage'));
+      
+      alert('Voting deadline updated successfully.');
+  };
+
+  const handleResetTimer = () => {
+      localStorage.removeItem('muse_voting_deadline');
+      setDeadlineInput('');
+      window.dispatchEvent(new Event('local-storage-update'));
+      window.dispatchEvent(new Event('storage'));
+      alert('Voting timer has been reset/removed.');
+  };
 
   // Effect: Periodic Poll for Live Surveillance Feed from Server
   useEffect(() => {
@@ -134,11 +169,46 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
          {activeTab === 'overview' && (
              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
                  <h1 className="text-2xl font-bold text-white mb-4">System Status</h1>
+                 
                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                      <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg relative overflow-hidden group">
                         <div className="absolute top-0 right-0 p-4 opacity-10"><Users size={64} className="text-emerald-500"/></div>
                         <h3 className="text-slate-400 text-sm font-bold uppercase tracking-wider mb-2">Total Targets</h3>
                         <p className="text-4xl font-display font-bold text-white">{logs.length}</p>
+                    </div>
+
+                    {/* VOTING CONTROL PANEL */}
+                    <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg col-span-1 md:col-span-2 relative overflow-hidden">
+                        <div className="flex items-center gap-3 mb-4">
+                            <Timer className="text-amber-400" />
+                            <h3 className="text-white font-bold text-lg">Voting Control</h3>
+                        </div>
+                        <div className="flex flex-col md:flex-row gap-4 items-end">
+                            <div className="w-full">
+                                <label className="block text-xs text-slate-400 mb-2">Set Voting Deadline</label>
+                                <input 
+                                    type="datetime-local" 
+                                    value={deadlineInput}
+                                    onChange={(e) => setDeadlineInput(e.target.value)}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white focus:border-indigo-500 outline-none"
+                                />
+                            </div>
+                            <button 
+                                onClick={handleSaveTimer}
+                                className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold transition-colors flex items-center gap-2"
+                            >
+                                <Save size={16} /> Save Timer
+                            </button>
+                            <button 
+                                onClick={handleResetTimer}
+                                className="px-6 py-3 bg-red-900/30 hover:bg-red-900/50 text-red-400 border border-red-900/50 rounded-lg font-bold transition-colors flex items-center gap-2"
+                            >
+                                <Ban size={16} /> Reset
+                            </button>
+                        </div>
+                        <p className="mt-4 text-xs text-slate-500">
+                            * When the timer expires, the app will automatically lock voting and crown the winner on the main screen.
+                        </p>
                     </div>
                  </div>
              </motion.div>
