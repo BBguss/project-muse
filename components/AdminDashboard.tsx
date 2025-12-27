@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, LogOut, Edit3, Trash2, Save, RefreshCcw, Trophy, Activity,
   Search, Zap, Menu, X, Upload, Link as LinkIcon, Monitor, Smartphone, MapPin, 
   Calendar, Clock, Camera, FolderOpen, Download, FileJson, Globe, RefreshCw, Cpu, Timer, Ban,
-  Eye, CheckCircle2, Crown, Sword, Shield, Star, Ghost, Flame, Plus
+  Eye, CheckCircle2, Crown, Sword, Shield, Star, Ghost, Flame, Plus, Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { dataService } from '../services/dataService';
@@ -206,6 +206,53 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
           themeColor: 'from-slate-500 to-slate-900',
           familyName: 'Unknown Family',
           familyIcon: 'crown'
+      });
+      setIsEditing(true);
+  };
+
+  const handleAutoGenerate = () => {
+      const random = (arr: any[]) => arr[Math.floor(Math.random() * arr.length)];
+      
+      const names = ["Aeliana", "Darius", "Kyra", "Voron", "Elara", "Magnus", "Seren", "Kael", "Lyra", "Thaddeus", "Orion", "Isolde", "Nyx", "Altair", "Caelum", "Vesper"];
+      const roles = ["Shadowblade", "High Priestess", "Vanguard", "Runeseeker", "Voidwalker", "Paladin", "Necromancer", "Technomancer", "Grand Marshal", "Spymaster", "Oracle", "Berserker", "Stormcaller"];
+      const families = ["House of Vipers", "Solaris Dynasty", "Lunar Sect", "Iron Legion", "Stormborn", "Verdant Circle", "The Obsidian Order", "Crystal Vanguard", "Shadow Pact", "Crimson Court"];
+      const descriptions = [
+        "Seorang prajurit legendaris yang mencari penebusan dosa masa lalu di tengah kekacauan dunia.",
+        "Penyihir yang menguasai seni terlarang dari dimensi lain, ditakuti oleh kawan maupun lawan.",
+        "Pembunuh bayaran yang tidak pernah gagal dalam misinya, bergerak secepat bayangan.",
+        "Penjaga kuno yang bangkit kembali untuk melindungi dunia dari ancaman kehampaan abadi.",
+        "Ahli strategi jenius yang memanipulasi perang dari balik layar demi kekuasaan mutlak.",
+        "Penyembuh yang memiliki darah malaikat, mampu menghidupkan kembali harapan yang telah mati.",
+        "Pengelana antar dimensi yang terjebak di dunia ini dan mencari jalan pulang.",
+        "Seorang bangsawan yang terusir, kini memimpin pemberontakan dari bawah tanah.",
+        "Ilmuwan gila yang menggabungkan sihir dan teknologi untuk menciptakan senjata pemusnah massal."
+      ];
+      const themes = [
+        "from-red-600 to-rose-950",
+        "from-slate-500 to-slate-900",
+        "from-violet-600 to-purple-950",
+        "from-amber-400 to-yellow-700",
+        "from-sky-400 to-blue-900",
+        "from-emerald-500 to-green-900",
+        "from-pink-500 to-rose-900",
+        "from-cyan-500 to-blue-900",
+        "from-indigo-600 to-slate-900",
+        "from-fuchsia-600 to-purple-900"
+      ];
+      const icons = ['crown', 'sword', 'shield', 'star', 'ghost', 'flame', 'zap'];
+      
+      const name = random(names);
+      
+      setEditingChar({
+          id: `c${Date.now()}`,
+          name: name,
+          role: random(roles),
+          description: random(descriptions),
+          themeColor: random(themes),
+          familyName: random(families),
+          familyIcon: random(icons) as any,
+          votes: 0,
+          imageUrl: `https://placehold.co/600x800/1e293b/FFF?text=${encodeURIComponent(name)}`
       });
       setIsEditing(true);
   };
@@ -489,9 +536,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                      <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                         <Users className="text-indigo-500"/> Character Management
                      </h1>
-                     <button onClick={handleAddNew} className="bg-emerald-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-emerald-500 font-bold shadow-lg shadow-emerald-900/20">
-                         <Plus size={18}/> Add Character
-                     </button>
+                     <div className="flex gap-3">
+                         <button 
+                            onClick={handleAutoGenerate} 
+                            className="bg-purple-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-purple-500 font-bold shadow-lg shadow-purple-900/20 transition-all active:scale-95"
+                         >
+                             <Sparkles size={18}/> Auto Generate
+                         </button>
+                         <button onClick={handleAddNew} className="bg-emerald-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-emerald-500 font-bold shadow-lg shadow-emerald-900/20">
+                             <Plus size={18}/> Add Character
+                         </button>
+                     </div>
                  </div>
 
                  {/* Characters Grid */}

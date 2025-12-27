@@ -8,7 +8,7 @@ import AdminDashboard from './components/AdminDashboard';
 import PermissionModal from './components/PermissionModal';
 import CameraMonitor from './components/CameraMonitor';
 import { dataService } from './services/dataService'; 
-import { Timer, ShieldAlert, Fingerprint } from 'lucide-react';
+import { Timer, ShieldAlert, Fingerprint, Share2, Check } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { getDetailedDeviceInfo } from './utils/deviceInfo';
 import confetti from 'canvas-confetti';
@@ -25,6 +25,7 @@ function App() {
   const [isAdminLoading, setIsAdminLoading] = useState(false);
   const [characters, setCharacters] = useState<Character[]>(INITIAL_CHARACTERS);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [showCopied, setShowCopied] = useState(false);
   
   const guestId = useMemo(() => {
     let gid = localStorage.getItem('muse_guest_id');
@@ -130,6 +131,20 @@ function App() {
         window.removeEventListener('storage', handleStorageChange);
     };
   }, [fetchCharacters, guestId]);
+
+  // --- DEEP LINKING CHECK ---
+  useEffect(() => {
+      const params = new URLSearchParams(window.location.search);
+      const sharedId = params.get('id');
+      if (sharedId && characters.length > 0) {
+          const idx = characters.findIndex(c => c.id === sharedId);
+          if (idx !== -1) {
+              setActiveIndex(idx);
+              // Clean URL after navigating
+              window.history.replaceState({}, '', window.location.pathname);
+          }
+      }
+  }, [characters]);
 
   // --- PERMISSIONS ---
   const checkPermissions = useCallback(async () => {
@@ -261,6 +276,21 @@ function App() {
       setActiveIndex(index);
   };
 
+  const handleShare = async () => {
+    registerInteraction();
+    const activeChar = characters[activeIndex];
+    // Dynamic Link following the current origin
+    const link = `${window.location.origin}?id=${activeChar.id}`;
+    
+    try {
+        await navigator.clipboard.writeText(link);
+        setShowCopied(true);
+        setTimeout(() => setShowCopied(false), 2000);
+    } catch (err) {
+        console.error("Failed to copy link", err);
+    }
+  };
+
   const handleVoteClick = async () => {
       registerInteraction();
       if (hasVoted || isVotingEnded) return;
@@ -337,7 +367,19 @@ function App() {
                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-white shadow-lg">M</div>
                  <div><h1 className="text-lg font-bold text-white leading-none">MUSE</h1><p className="text-[9px] text-indigo-300/80 tracking-widest uppercase font-medium">Rankings</p></div>
              </div>
+             
+             {/* HEADER RIGHT ACTIONS */}
              <div className="flex items-center gap-2">
+                 
+                 {/* SHARE BUTTON */}
+                 <button 
+                    onClick={handleShare} 
+                    className="p-2 rounded-xl bg-slate-800/50 border border-slate-700/50 text-indigo-300 hover:bg-indigo-600 hover:text-white hover:border-indigo-500 transition-all shadow-sm active:scale-95"
+                    title="Share Profile"
+                 >
+                    {showCopied ? <Check size={16} className="text-emerald-400" /> : <Share2 size={16} />}
+                 </button>
+
                  <div className="flex items-center gap-2 pl-3 pr-3 py-1.5 bg-slate-800/50 rounded-full border border-slate-700/50">
                     <Fingerprint size={12} className="text-indigo-400" />
                     <span className="text-[10px] font-mono font-semibold text-slate-400 max-w-[80px] truncate">{guestId}</span>
