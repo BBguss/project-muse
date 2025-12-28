@@ -229,7 +229,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
           votes: 0,
           themeColor: 'from-slate-500 to-slate-900',
           familyName: 'Unknown Family',
-          familyIcon: 'crown'
+          familyIcon: 'crown',
+          activeEffect: 'none'
       });
       setIsEditing(true);
   };
@@ -275,6 +276,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
           themeColor: random(themes),
           familyName: random(families),
           familyIcon: random(icons) as any,
+          activeEffect: 'none',
           votes: 0,
           imageUrl: `https://placehold.co/600x800/1e293b/FFF?text=${encodeURIComponent(name)}`
       });
@@ -722,15 +724,28 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                                          </div>
                                      </div>
 
-                                     {/* Technical Data */}
+                                     {/* Technical Data & VISUAL EFFECTS */}
                                      <div className="grid grid-cols-2 gap-6 mb-6">
                                          <div>
-                                             <label className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 block">Current Votes</label>
-                                             <input type="number" value={editingChar.votes || 0} onChange={(e) => setEditingChar({...editingChar, votes: parseInt(e.target.value)})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white focus:border-indigo-500 outline-none font-mono"/>
+                                             <label className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 block">Active Effect (Aura)</label>
+                                             <select 
+                                                value={editingChar.activeEffect || 'none'} 
+                                                onChange={(e) => setEditingChar({...editingChar, activeEffect: e.target.value as any})}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white focus:border-indigo-500 outline-none cursor-pointer"
+                                             >
+                                                <option value="none">None (Default)</option>
+                                                <option value="fire">🔥 Burning Rage</option>
+                                                <option value="lightning">⚡ Electric Surge</option>
+                                                <option value="shadow">👻 Dark Aura</option>
+                                             </select>
                                          </div>
                                          <div>
                                              <label className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 block">Theme Gradient (Tailwind)</label>
                                              <input type="text" value={editingChar.themeColor || ''} onChange={(e) => setEditingChar({...editingChar, themeColor: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-xs text-slate-300 focus:border-indigo-500 outline-none font-mono" placeholder="from-color-500 to-color-900"/>
+                                         </div>
+                                         <div className="col-span-2">
+                                            <label className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 block">Current Votes</label>
+                                            <input type="number" value={editingChar.votes || 0} onChange={(e) => setEditingChar({...editingChar, votes: parseInt(e.target.value)})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white focus:border-indigo-500 outline-none font-mono"/>
                                          </div>
                                      </div>
 

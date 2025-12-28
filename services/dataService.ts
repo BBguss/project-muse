@@ -93,7 +93,8 @@ export const dataService = {
             votes: d.votes,
             themeColor: d.theme_color,
             familyName: d.family_name || 'Unknown Family',
-            familyIcon: d.family_icon || 'crown'
+            familyIcon: d.family_icon || 'crown',
+            activeEffect: d.active_effect || 'none' // Map active_effect
         }));
         safeSetItem('muse_characters', JSON.stringify(mapped));
         return mapped;
@@ -144,7 +145,8 @@ export const dataService = {
                   votes: character.votes,
                   theme_color: character.themeColor,
                   family_name: character.familyName,
-                  family_icon: character.familyIcon
+                  family_icon: character.familyIcon,
+                  active_effect: character.activeEffect // Save to DB
               });
           if (error) {
               logSupabaseError("Save Character Error", error);

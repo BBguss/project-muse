@@ -14,7 +14,8 @@ export const INITIAL_CHARACTERS: Character[] = [
     votes: 1250,
     themeColor: "from-red-600 to-rose-950",
     familyName: "The Obsidian Order",
-    familyIcon: "crown"
+    familyIcon: "crown",
+    activeEffect: "fire"
   },
   {
     id: 'c2',
@@ -25,7 +26,8 @@ export const INITIAL_CHARACTERS: Character[] = [
     votes: 980,
     themeColor: "from-slate-500 to-slate-900",
     familyName: "The Obsidian Order",
-    familyIcon: "sword"
+    familyIcon: "sword",
+    activeEffect: "none"
   },
   {
     id: 'c3',
@@ -36,7 +38,8 @@ export const INITIAL_CHARACTERS: Character[] = [
     votes: 1120,
     themeColor: "from-violet-600 to-purple-950",
     familyName: "The Obsidian Order",
-    familyIcon: "ghost"
+    familyIcon: "ghost",
+    activeEffect: "shadow"
   },
   {
     id: 'c4',
@@ -47,7 +50,8 @@ export const INITIAL_CHARACTERS: Character[] = [
     votes: 890,
     themeColor: "from-amber-400 to-yellow-700",
     familyName: "The Obsidian Order",
-    familyIcon: "zap"
+    familyIcon: "zap",
+    activeEffect: "lightning"
   },
   {
     id: 'c5',
@@ -58,7 +62,8 @@ export const INITIAL_CHARACTERS: Character[] = [
     votes: 1050,
     themeColor: "from-sky-400 to-blue-900",
     familyName: "The Obsidian Order",
-    familyIcon: "star"
+    familyIcon: "star",
+    activeEffect: "none"
   },
   {
     id: 'c6',
@@ -69,7 +74,8 @@ export const INITIAL_CHARACTERS: Character[] = [
     votes: 750,
     themeColor: "from-zinc-600 to-black",
     familyName: "The Obsidian Order",
-    familyIcon: "sword"
+    familyIcon: "sword",
+    activeEffect: "none"
   },
   {
     id: 'c7',
@@ -80,7 +86,8 @@ export const INITIAL_CHARACTERS: Character[] = [
     votes: 680,
     themeColor: "from-blue-600 to-indigo-900",
     familyName: "The Obsidian Order",
-    familyIcon: "shield"
+    familyIcon: "shield",
+    activeEffect: "lightning"
   },
   {
     id: 'c8',
@@ -91,7 +98,8 @@ export const INITIAL_CHARACTERS: Character[] = [
     votes: 1340,
     themeColor: "from-rose-400 to-pink-800",
     familyName: "The Obsidian Order",
-    familyIcon: "flame"
+    familyIcon: "flame",
+    activeEffect: "fire"
   },
   {
     id: 'c9',
@@ -102,7 +110,8 @@ export const INITIAL_CHARACTERS: Character[] = [
     votes: 520,
     themeColor: "from-yellow-600 to-amber-900",
     familyName: "The Obsidian Order",
-    familyIcon: "shield"
+    familyIcon: "shield",
+    activeEffect: "none"
   },
   {
     id: 'c10',
@@ -113,6 +122,7 @@ export const INITIAL_CHARACTERS: Character[] = [
     votes: 915,
     themeColor: "from-indigo-600 to-violet-950",
     familyName: "The Obsidian Order",
-    familyIcon: "ghost"
+    familyIcon: "ghost",
+    activeEffect: "shadow"
   }
 ];

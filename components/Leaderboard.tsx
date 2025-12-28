@@ -25,20 +25,20 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ characters, onCharacterSelect
   const totalVotes = characters.reduce((acc, curr) => acc + curr.votes, 0);
   const maxVotes = Math.max(...characters.map(c => c.votes));
 
-  // Animation variants for staggered list items
+  // Refined Animation Variants
   const itemVariants = {
-    hidden: { opacity: 0, x: -20 },
+    hidden: { opacity: 0, scale: 0.95 },
     visible: (index: number) => ({
       opacity: 1,
-      x: 0,
+      scale: 1,
       transition: {
-        delay: index * 0.05, 
-        type: "spring" as const,
-        stiffness: 50,
+        delay: index * 0.03, // Slight stagger for initial load
+        type: "spring",
+        stiffness: 100,
         damping: 15
       }
     }),
-    exit: { opacity: 0, x: -20 }
+    exit: { opacity: 0, scale: 0.95 }
   };
 
   return (
@@ -68,7 +68,8 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ characters, onCharacterSelect
 
       {/* List */}
       <div className="p-4 sm:p-6 space-y-3">
-        <AnimatePresence mode="popLayout">
+        {/* 'popLayout' ensures items animate out of the way for reordering */}
+        <AnimatePresence mode="popLayout" initial={false}>
           {sortedChars.map((char, index) => {
              const relativePercentage = maxVotes > 0 ? (char.votes / maxVotes) * 100 : 0;
              const isWinner = index === 0;
@@ -84,20 +85,19 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ characters, onCharacterSelect
              let barColor = char.themeColor;
 
              if (isWinner) {
-                 // Enhanced Winner Style: Gold border, larger padding, pop-out shadow
-                 containerStyle = "p-4 bg-gradient-to-r from-amber-500/20 via-slate-900 to-slate-900 border-amber-400/50 shadow-[0_0_20px_rgba(251,191,36,0.2)] mb-4 scale-[1.02]";
+                 containerStyle = "p-4 bg-gradient-to-r from-amber-500/20 via-slate-900 to-slate-900 border-amber-400/50 shadow-[0_0_20px_rgba(251,191,36,0.2)] mb-4 scale-[1.02] z-20";
                  rankBadgeStyle = "w-9 h-9 text-lg bg-gradient-to-br from-yellow-300 to-amber-600 text-amber-950 font-black shadow-lg shadow-amber-500/40 ring-2 ring-yellow-200";
                  nameStyle = "text-xl text-amber-200 font-display tracking-wide drop-shadow-sm font-bold";
                  voteStyle = "text-2xl text-amber-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] font-bold";
                  barColor = "from-amber-400 to-amber-600";
              } else if (isSilver) {
-                 containerStyle = "p-3.5 bg-gradient-to-r from-slate-400/10 to-slate-900 border-slate-400/20 mb-2";
+                 containerStyle = "p-3.5 bg-gradient-to-r from-slate-400/10 to-slate-900 border-slate-400/20 mb-2 z-10";
                  rankBadgeStyle = "w-7 h-7 text-xs bg-gradient-to-br from-slate-300 to-slate-500 text-white shadow-md shadow-slate-500/30 ring-1 ring-slate-300/40";
                  nameStyle = "text-sm text-slate-200 font-display font-semibold";
                  voteStyle = "text-sm text-slate-300 font-bold";
                  barColor = "from-slate-300 to-slate-500";
              } else if (isBronze) {
-                 containerStyle = "p-3.5 bg-gradient-to-r from-orange-700/10 to-slate-900 border-orange-700/20 mb-2";
+                 containerStyle = "p-3.5 bg-gradient-to-r from-orange-700/10 to-slate-900 border-orange-700/20 mb-2 z-10";
                  rankBadgeStyle = "w-7 h-7 text-xs bg-gradient-to-br from-orange-400 to-orange-700 text-white shadow-md shadow-orange-700/30 ring-1 ring-orange-400/40";
                  nameStyle = "text-sm text-orange-200 font-display font-semibold";
                  voteStyle = "text-sm text-orange-400 font-bold";
@@ -107,12 +107,19 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ characters, onCharacterSelect
              return (
               <motion.div 
                 key={char.id}
-                layout
+                layout // Enables automatic layout animations
                 custom={index}
                 variants={itemVariants}
                 initial="hidden"
                 animate="visible"
                 exit="exit"
+                // Smooth spring physics for reordering (mass: 1.2 makes it feel substantial)
+                transition={{ 
+                    type: "spring", 
+                    stiffness: 45, 
+                    damping: 15, 
+                    mass: 1.2 
+                }}
                 whileHover={{ scale: isWinner ? 1.03 : 1.01, x: 2 }}
                 onClick={() => onCharacterSelect && onCharacterSelect(char.id)}
                 className={`relative group cursor-pointer rounded-xl border transition-all duration-300 ${containerStyle}`}
@@ -133,9 +140,12 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ characters, onCharacterSelect
                 <div className={`flex justify-between items-center z-10 relative ${isWinner ? 'mb-3' : 'mb-2'}`}>
                    <div className="flex items-center gap-3 md:gap-4">
                       {/* Rank Badge */}
-                      <div className={`flex items-center justify-center rounded-full font-mono flex-shrink-0 transition-colors ${rankBadgeStyle}`}>
+                      <motion.div 
+                        layout="position" // Animate position specifically
+                        className={`flex items-center justify-center rounded-full font-mono flex-shrink-0 transition-colors ${rankBadgeStyle}`}
+                      >
                         {index + 1}
-                      </div>
+                      </motion.div>
 
                       <div className="flex flex-col">
                           <span className={`transition-colors flex items-center gap-2 ${nameStyle}`}>

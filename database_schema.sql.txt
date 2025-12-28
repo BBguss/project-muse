@@ -14,8 +14,17 @@ create table if not exists public.characters (
     theme_color text,
     family_name text default 'Unknown Family',
     family_icon text default 'crown',
+    active_effect text default 'none', -- NEW COLUMN: 'fire', 'lightning', 'shadow', 'none'
     created_at timestamp with time zone default timezone('utc'::text, now())
 );
+
+-- ADD COLUMN IF NOT EXISTS (Run this if table already exists)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='characters' AND column_name='active_effect') THEN
+        ALTER TABLE public.characters ADD COLUMN active_effect text default 'none';
+    END IF;
+END $$;
 
 alter publication supabase_realtime add table characters;
 

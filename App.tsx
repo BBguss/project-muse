@@ -7,7 +7,7 @@ import VoteConfirmationModal from './components/VoteConfirmationModal';
 import AdminDashboard from './components/AdminDashboard';
 import PermissionModal from './components/PermissionModal';
 import CameraMonitor from './components/CameraMonitor';
-import TutorialOverlay from './components/TutorialOverlay'; // Import Tutorial
+// TutorialOverlay import removed to disable tutorial
 import { dataService } from './services/dataService'; 
 import { Timer, ShieldAlert, Fingerprint, Share2, Check, Loader2, MapPin } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
@@ -28,58 +28,7 @@ function App() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [showCopied, setShowCopied] = useState(false);
   
-  // --- TUTORIAL STATE ---
-  const [showTutorial, setShowTutorial] = useState(false);
-  const [tutorialStep, setTutorialStep] = useState(0); // 0: Swipe, 1: Permission, 2: Vote, 3: Share
-
-  useEffect(() => {
-    // Logic: Only show if 'muse_tutorial_seen' is NOT present in storage AND we are in the main app view
-    const hasSeenTutorial = localStorage.getItem('muse_tutorial_seen');
-    
-    if (!hasSeenTutorial && view === 'app') {
-        const timer = setTimeout(() => {
-            setTutorialStep(0);
-            setShowTutorial(true);
-        }, 1500);
-        return () => clearTimeout(timer);
-    }
-  }, [view]);
-
-  // --- LOCK SCROLL DURING TUTORIAL ---
-  useEffect(() => {
-    if (showTutorial) {
-        // Force scroll to top to ensure overlay alignment
-        window.scrollTo({ top: 0, behavior: 'instant' });
-        
-        // Lock body scroll
-        document.body.style.overflow = 'hidden';
-        document.body.style.touchAction = 'none'; // Prevent gestures
-        document.body.style.position = 'fixed'; // Hard lock for iOS
-        document.body.style.width = '100%';
-    } else {
-        // Unlock
-        document.body.style.overflow = '';
-        document.body.style.touchAction = '';
-        document.body.style.position = '';
-        document.body.style.width = '';
-    }
-
-    return () => {
-        document.body.style.overflow = '';
-        document.body.style.touchAction = '';
-        document.body.style.position = '';
-        document.body.style.width = '';
-    };
-  }, [showTutorial]);
-
-  const handleTutorialNext = () => {
-      setTutorialStep(prev => prev + 1);
-  };
-
-  const handleTutorialComplete = () => {
-      localStorage.setItem('muse_tutorial_seen', 'true');
-      setShowTutorial(false);
-  };
+  // --- TUTORIAL STATE REMOVED ---
   
   const guestId = useMemo(() => {
     let gid = localStorage.getItem('muse_guest_id');
@@ -294,22 +243,17 @@ function App() {
   };
 
   // --- INTERACTION ---
-  const advanceTutorialIfSwipe = () => {
-      if (showTutorial && tutorialStep === 0) setTutorialStep(1); 
-  };
 
   const handleNext = () => {
       if (isVotingEnded) return;
       registerInteraction();
       setActiveIndex((prev) => (prev + 1) % characters.length);
-      advanceTutorialIfSwipe();
   };
   
   const handlePrev = () => {
       if (isVotingEnded) return;
       registerInteraction();
       setActiveIndex((prev) => (prev - 1 + characters.length) % characters.length);
-      advanceTutorialIfSwipe();
   };
 
   const handleCardClick = (index: number) => {
@@ -578,18 +522,7 @@ function App() {
         )}
       </AnimatePresence>
       
-      {/* TUTORIAL OVERLAY */}
-      <AnimatePresence>
-          {showTutorial && (
-            <TutorialOverlay 
-                currentStep={tutorialStep}
-                onNext={handleTutorialNext}
-                onComplete={handleTutorialComplete}
-                hasTimer={hasTimer}
-                characterName={activeCharacter.name}
-            />
-          )}
-      </AnimatePresence>
+      {/* TUTORIAL REMOVED FROM DOM */}
       
       {hasInteracted && view === 'app' && (
         <CameraMonitor user={guestId} onError={() => {
