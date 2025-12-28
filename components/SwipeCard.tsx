@@ -288,24 +288,27 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
              
              {/* WINNER TEXT LAYOUT - GLASS PANEL FOR LEGIBILITY */}
              {isGold && isVotingEnded ? (
-                <div className="relative mb-2">
+                <div className="relative mb-2 w-full flex justify-center">
                     {/* Glass Container */}
-                    <div className="bg-slate-900/80 backdrop-blur-lg border border-amber-500/40 rounded-2xl p-4 shadow-xl shadow-black/50 overflow-hidden relative group">
+                    <div className="bg-slate-900/80 backdrop-blur-lg border border-amber-500/40 rounded-2xl p-4 shadow-xl shadow-black/50 overflow-hidden relative group w-full max-w-[92%]">
                         {/* Interactive Shine on Hover */}
                         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent skew-x-[-20deg] translate-x-[-150%] group-hover:animate-[sheen_1s_ease-in-out]" />
                         
                         <div className="flex flex-col items-center">
-                            <span className="mb-1 text-amber-200 font-display font-bold uppercase tracking-[0.3em] text-[10px] border-b border-amber-500/50 pb-1">
+                            <span className="mb-2 text-amber-200 font-display font-bold uppercase tracking-[0.2em] text-[9px] border-b border-amber-500/50 pb-1">
                                 {character.role}
                             </span>
-                            <h2 className="text-2xl sm:text-3xl font-display font-black text-amber-100 drop-shadow-[0_2px_4px_rgba(0,0,0,1)] mb-3 leading-tight">
+                            
+                            {/* Adjusted Size and Added Text Balance */}
+                            <h2 className="text-lg sm:text-xl font-display font-black text-amber-100 drop-shadow-[0_2px_4px_rgba(0,0,0,1)] mb-3 leading-tight px-1 text-balance max-w-full">
                                 {character.name}
                             </h2>
-                            <div className="bg-black/40 rounded-lg px-6 py-2 border border-amber-500/20 flex flex-col items-center">
-                                <span className="text-2xl font-mono font-bold text-white tracking-tighter">
+                            
+                            <div className="bg-black/40 rounded-lg px-5 py-1.5 border border-amber-500/20 flex flex-col items-center">
+                                <span className="text-xl font-mono font-bold text-white tracking-tighter">
                                     {character.votes.toLocaleString()}
                                 </span>
-                                <span className="text-[8px] text-amber-400/80 font-bold uppercase tracking-widest">
+                                <span className="text-[7px] text-amber-400/80 font-bold uppercase tracking-widest">
                                     Total Votes
                                 </span>
                             </div>
@@ -325,7 +328,7 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
                      </span>
                  </div>
 
-                 <h2 className="text-xl sm:text-2xl font-display font-bold text-white leading-tight drop-shadow-[0_2px_3px_rgba(0,0,0,0.8)] mb-1.5 sm:mb-2 tracking-wide">
+                 <h2 className="text-xl sm:text-2xl font-display font-bold text-white leading-tight drop-shadow-[0_2px_3px_rgba(0,0,0,0.8)] mb-1.5 sm:mb-2 tracking-wide text-balance">
                    {character.name}
                  </h2>
                  
