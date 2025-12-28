@@ -350,6 +350,82 @@ export const dataService = {
       }
   },
 
+  /**
+   * Menghapus log (User + Vote) berdasarkan User Identifier
+   * Menghapus dari Supabase dan LocalStorage
+   */
+  deleteAccessLog: async (userIdentifier: string): Promise<boolean> => {
+      let success = true;
+
+      // 1. Delete from Supabase
+      if (isSupabaseConfigured() && supabase) {
+          // Delete from 'votes' first (Foreign Key constraint usually cascades, but good to be explicit)
+          const { error: voteError } = await supabase.from('votes').delete().eq('user_identifier', userIdentifier);
+          if (voteError) console.warn("Delete Vote Error:", voteError);
+
+          // Delete from 'users'
+          const { error: userError } = await supabase.from('users').delete().eq('user_identifier', userIdentifier);
+          if (userError) {
+              console.error("Delete User Error:", userError);
+              success = false;
+          }
+      }
+
+      // 2. Delete from LocalStorage (Iterate all keys)
+      // This is necessary because keys are dynamic (muse_login_log_TIMESTAMP_RANDOM)
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key) {
+              // Check exact matches or json content matches
+              if (key === `muse_vote_record_${userIdentifier}`) {
+                  keysToRemove.push(key);
+              } else if (key.startsWith('muse_login_log_')) {
+                  try {
+                      const item = JSON.parse(localStorage.getItem(key) || '{}');
+                      if (item.user === userIdentifier) {
+                          keysToRemove.push(key);
+                      }
+                  } catch(e) {}
+              }
+          }
+      }
+      
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      
+      return success;
+  },
+
+  /**
+   * Menghapus SEMUA log (Reset Database Tracking)
+   */
+  clearAllAccessLogs: async (): Promise<boolean> => {
+      let success = true;
+
+      // 1. Supabase Truncate/Delete All
+      if (isSupabaseConfigured() && supabase) {
+          const { error: vError } = await supabase.from('votes').delete().neq('id', -1); // Hack to delete all
+          const { error: uError } = await supabase.from('users').delete().neq('id', -1);
+          
+          if (vError || uError) {
+              console.error("Clear DB Error", vError || uError);
+              success = false;
+          }
+      }
+
+      // 2. LocalStorage Clear (Only Logs, keep characters)
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.startsWith('muse_vote_record_') || key.startsWith('muse_login_log_'))) {
+              keysToRemove.push(key);
+          }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+
+      return success;
+  },
+
   subscribeToVotes: (callback: () => void) => {
     if (isSupabaseConfigured() && supabase) {
       const channel = supabase

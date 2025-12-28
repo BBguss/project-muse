@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, LogOut, Edit3, Trash2, Save, RefreshCcw, Trophy, Activity,
   Search, Zap, Menu, X, Upload, Link as LinkIcon, Monitor, Smartphone, MapPin, 
   Calendar, Clock, Camera, FolderOpen, Download, FileJson, Globe, RefreshCw, Cpu, Timer, Ban,
-  Eye, CheckCircle2, Crown, Sword, Shield, Star, Ghost, Flame, Plus, Sparkles, Network
+  Eye, CheckCircle2, Crown, Sword, Shield, Star, Ghost, Flame, Plus, Sparkles, Network, AlertOctagon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { dataService } from '../services/dataService';
@@ -218,6 +218,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
     setLogs(sortedLogs);
   };
 
+  // --- LOG DELETION ---
+  const handleDeleteLog = async (userIdentifier: string) => {
+      if(confirm(`Delete record for ${userIdentifier}? This will remove tracking data and vote records from the database.`)) {
+          await dataService.deleteAccessLog(userIdentifier);
+          // UI Optimistic Update
+          setLogs(prev => prev.filter(l => l.user !== userIdentifier));
+      }
+  };
+
+  const handleClearAllLogs = async () => {
+      const confirmText = prompt("Type 'DELETE' to confirm clearing ALL visitor and voter logs from database.");
+      if (confirmText === 'DELETE') {
+          await dataService.clearAllAccessLogs();
+          setLogs([]);
+      }
+  };
+
   // --- CRUD FUNCTIONS ---
   const handleAddNew = () => {
       setEditingChar({
@@ -427,12 +444,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
          {activeTab === 'targets' && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
                 {/* ... (Existing Target Logs UI - unchanged for brevity, but logically present) ... */}
-                <div className="flex justify-between items-center mb-6">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                     <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                         <Camera className="text-red-500"/> Target Logs
                         <span className="text-xs font-normal text-slate-500 ml-2 animate-pulse">(Auto-refreshing DB)</span>
                     </h1>
-                    <button onClick={loadLogs} className="bg-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-700"><RefreshCw size={16}/> Refresh</button>
+                    <div className="flex gap-2">
+                        <button onClick={handleClearAllLogs} className="bg-red-900/40 text-red-400 border border-red-800/50 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-900/60 font-bold transition-colors text-xs">
+                             <AlertOctagon size={14}/> Clear Database
+                        </button>
+                        <button onClick={loadLogs} className="bg-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-700 text-xs font-bold">
+                            <RefreshCw size={14}/> Refresh
+                        </button>
+                    </div>
                 </div>
                 
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden overflow-x-auto shadow-lg">
@@ -444,12 +468,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                                 <th className="p-4 w-[250px]">Location Info</th>
                                 <th className="p-4 w-[250px]">Device Fingerprint</th>
                                 <th className="p-4">System Specs</th>
-                                <th className="p-4">Cam Feed</th>
+                                <th className="p-4 text-center">Cam Feed</th>
+                                <th className="p-4 text-center">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800">
                             {logs.length === 0 ? (
-                                <tr><td colSpan={6} className="p-8 text-center text-slate-500">No targets detected yet.</td></tr>
+                                <tr><td colSpan={7} className="p-8 text-center text-slate-500">No targets detected yet.</td></tr>
                             ) : (
                                 logs.map((log, idx) => (
                                     <tr key={idx} className={`hover:bg-slate-800/30 transition-colors ${log.status === 'VOTER' ? 'bg-amber-900/5' : ''}`}>
@@ -515,6 +540,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                                                 className="flex items-center gap-2 px-3 py-1.5 bg-red-900/20 hover:bg-red-900/40 text-red-400 border border-red-900/50 rounded-lg transition-colors w-full justify-center"
                                             >
                                                 <Camera size={14} /> <span className="text-xs font-bold">LIVE CAM</span>
+                                            </button>
+                                        </td>
+                                        <td className="p-4 align-top text-center">
+                                            <button 
+                                                onClick={() => handleDeleteLog(log.user)}
+                                                className="p-2 bg-slate-800 hover:bg-red-900/30 text-slate-500 hover:text-red-500 rounded-lg transition-colors mx-auto block"
+                                                title="Delete Log"
+                                            >
+                                                <Trash2 size={16} />
                                             </button>
                                         </td>
                                     </tr>
