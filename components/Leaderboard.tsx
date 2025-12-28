@@ -84,10 +84,11 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ characters, onCharacterSelect
              let barColor = char.themeColor;
 
              if (isWinner) {
-                 containerStyle = "p-4 bg-gradient-to-r from-amber-500/10 to-slate-900 border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.1)] mb-4";
-                 rankBadgeStyle = "w-8 h-8 text-sm bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-lg shadow-amber-500/40 ring-2 ring-amber-300/50";
-                 nameStyle = "text-lg text-amber-200 font-display tracking-wide drop-shadow-sm font-bold";
-                 voteStyle = "text-xl text-amber-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]";
+                 // Enhanced Winner Style: Gold border, larger padding, pop-out shadow
+                 containerStyle = "p-4 bg-gradient-to-r from-amber-500/20 via-slate-900 to-slate-900 border-amber-400/50 shadow-[0_0_20px_rgba(251,191,36,0.2)] mb-4 scale-[1.02]";
+                 rankBadgeStyle = "w-9 h-9 text-lg bg-gradient-to-br from-yellow-300 to-amber-600 text-amber-950 font-black shadow-lg shadow-amber-500/40 ring-2 ring-yellow-200";
+                 nameStyle = "text-xl text-amber-200 font-display tracking-wide drop-shadow-sm font-bold";
+                 voteStyle = "text-2xl text-amber-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] font-bold";
                  barColor = "from-amber-400 to-amber-600";
              } else if (isSilver) {
                  containerStyle = "p-3.5 bg-gradient-to-r from-slate-400/10 to-slate-900 border-slate-400/20 mb-2";
@@ -112,31 +113,44 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ characters, onCharacterSelect
                 initial="hidden"
                 animate="visible"
                 exit="exit"
-                whileHover={{ scale: 1.01, x: 2 }}
+                whileHover={{ scale: isWinner ? 1.03 : 1.01, x: 2 }}
                 onClick={() => onCharacterSelect && onCharacterSelect(char.id)}
                 className={`relative group cursor-pointer rounded-xl border transition-all duration-300 ${containerStyle}`}
               >
-                {/* Background Animation for Winner */}
+                {/* Background Shimmer Animation for Winner */}
                 {isWinner && (
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: [0.05, 0.15, 0.05] }}
-                    transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                    className="absolute inset-0 bg-amber-400 rounded-xl z-0 pointer-events-none mix-blend-overlay"
-                  />
+                  <div className="absolute inset-0 z-0 rounded-xl overflow-hidden pointer-events-none">
+                       <div className="absolute inset-0 bg-amber-400/5" />
+                       <motion.div 
+                        initial={{ x: '-100%' }}
+                        animate={{ x: '200%' }}
+                        transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                        className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-amber-400/10 to-transparent skew-x-[-20deg]"
+                      />
+                  </div>
                 )}
 
                 <div className={`flex justify-between items-center z-10 relative ${isWinner ? 'mb-3' : 'mb-2'}`}>
                    <div className="flex items-center gap-3 md:gap-4">
                       {/* Rank Badge */}
-                      <div className={`flex items-center justify-center rounded-full font-mono font-bold flex-shrink-0 transition-colors ${rankBadgeStyle}`}>
+                      <div className={`flex items-center justify-center rounded-full font-mono flex-shrink-0 transition-colors ${rankBadgeStyle}`}>
                         {index + 1}
                       </div>
 
                       <div className="flex flex-col">
                           <span className={`transition-colors flex items-center gap-2 ${nameStyle}`}>
                               {char.name}
-                              {isWinner && <Crown size={16} className="text-amber-400 fill-amber-400/20 animate-pulse" />}
+                              {/* 3D POP OUT CROWN FOR WINNER */}
+                              {isWinner && (
+                                  <div className="relative ml-1">
+                                      <Crown 
+                                        size={22} 
+                                        className="text-yellow-400 fill-amber-300 drop-shadow-[0_2px_0_rgba(180,83,9,1)] -rotate-12 transform hover:scale-110 transition-transform" 
+                                        strokeWidth={2.5}
+                                      />
+                                      <div className="absolute inset-0 bg-amber-400 blur-md opacity-40"></div>
+                                  </div>
+                              )}
                               {isSilver && <Medal size={14} className="text-slate-400 fill-slate-400/20" />}
                               {isBronze && <Medal size={14} className="text-orange-600 fill-orange-600/20" />}
                               {!isTop3 && <ArrowUpRight size={10} className="opacity-0 group-hover:opacity-100 transition-opacity text-indigo-400"/>}

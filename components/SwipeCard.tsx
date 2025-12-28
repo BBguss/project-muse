@@ -46,21 +46,19 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
   if (Math.abs(offset) > 2) return null;
 
   // --- PERFORMANCE OPTIMIZED VARIANTS ---
-  // Removed 'filter: blur/brightness' which destroys FPS on low-end devices.
-  // Using simple opacity and scale instead.
   const variants = {
     active: { 
       x: 0, 
       scale: 1, 
       zIndex: 20, 
       opacity: 1,
-      rotate: 0, // Changed from rotateY to 2D rotate for better performance
+      rotate: 0, 
     },
     left: { 
-      x: "-95%", // Push further off screen
+      x: "-95%", 
       scale: 0.9, 
       zIndex: 10, 
-      opacity: 0, // Hide immediately when swiped to reduce draw calls
+      opacity: 0, 
       rotate: -10,
     },
     right: { 
@@ -82,7 +80,6 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
       zIndex: 0, 
       opacity: 0,
     },
-    // Background stack state (the cards behind the active one)
     stackLeft: {
         x: -40,
         scale: 0.9,
@@ -129,7 +126,7 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
 
   // Defines border and glow based on rank
   const getRankStyles = () => {
-      if (isGold) return 'border-amber-400 shadow-[0_0_20px_rgba(251,191,36,0.4)]'; // Reduced shadow radius
+      if (isGold) return 'border-amber-300 shadow-[0_0_40px_rgba(251,191,36,0.6)] ring-2 ring-amber-500/50'; // Stronger Gold
       if (isSilver) return 'border-slate-300 shadow-[0_0_15px_rgba(203,213,225,0.3)]';
       if (isBronze) return 'border-orange-700 shadow-[0_0_15px_rgba(194,65,12,0.3)]';
       return isActive ? 'border-white/20' : 'border-slate-800';
@@ -151,29 +148,26 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
       transition={{ type: "spring", stiffness: 200, damping: 25 }}
       className="absolute w-[72%] max-w-[280px] aspect-[9/14] cursor-pointer origin-bottom touch-none select-none"
       onClick={onClick}
-      // Force GPU layer promotion
       style={{ willChange: 'transform', backfaceVisibility: 'hidden' }}
       
       drag={isActive && !isVotingEnded ? "x" : false}
       dragConstraints={{ left: 0, right: 0 }}
-      // Lower elastic makes it feel more "attached" to finger, lighter math
       dragElastic={0.05} 
-      dragMomentum={false} // Disable momentum physics for instant stop
+      dragMomentum={false} 
       onDragEnd={handleDragEnd}
       whileTap={isActive && !isVotingEnded ? { scale: 0.98, cursor: "grabbing" } : {}}
     >
       
-      {/* GOD RAYS FOR WINNER (Simplified) */}
+      {/* --- 1. SPOTLIGHT GOD RAYS FOR WINNER --- */}
       <AnimatePresence>
           {isGold && isActive && (
-              <div className="absolute -inset-20 z-[-10] flex items-center justify-center pointer-events-none opacity-40">
-                   {/* CSS Animation is lighter than JS Framer Motion for infinite loops */}
-                   <div className="w-full h-full bg-[conic-gradient(from_0deg_at_50%_50%,rgba(251,191,36,0.2)_0deg,transparent_20deg,rgba(251,191,36,0.2)_40deg,transparent_60deg,rgba(251,191,36,0.2)_80deg,transparent_100deg,rgba(251,191,36,0.2)_120deg,transparent_140deg,rgba(251,191,36,0.2)_160deg,transparent_180deg,rgba(251,191,36,0.2)_200deg,transparent_220deg,rgba(251,191,36,0.2)_240deg,transparent_260deg,rgba(251,191,36,0.2)_280deg,transparent_300deg,rgba(251,191,36,0.2)_320deg,transparent_340deg,rgba(251,191,36,0.2)_360deg)] rounded-full blur-xl animate-[spin_10s_linear_infinite]" />
+              <div className="absolute -inset-[150%] z-[-20] flex items-center justify-center pointer-events-none opacity-60 mix-blend-screen">
+                   <div className="w-full h-full bg-[conic-gradient(from_0deg_at_50%_50%,rgba(251,191,36,0.4)_0deg,transparent_20deg,rgba(251,191,36,0.1)_40deg,transparent_60deg,rgba(251,191,36,0.4)_80deg,transparent_100deg,rgba(251,191,36,0.1)_120deg,transparent_140deg,rgba(251,191,36,0.4)_160deg,transparent_180deg,rgba(251,191,36,0.1)_200deg,transparent_220deg,rgba(251,191,36,0.4)_240deg,transparent_260deg,rgba(251,191,36,0.1)_280deg,transparent_300deg,rgba(251,191,36,0.4)_320deg,transparent_340deg,rgba(251,191,36,0.4)_360deg)] rounded-full blur-2xl animate-[spin_20s_linear_infinite]" />
               </div>
           )}
       </AnimatePresence>
 
-      {/* Static Glow Effect instead of Animated Gaussian Blur */}
+      {/* Static Glow Effect */}
       {isActive && !isTop3 && (
          <div className={`absolute -inset-1 bg-gradient-to-t ${character.themeColor} opacity-30 rounded-[3rem] -z-10`} />
       )}
@@ -181,31 +175,57 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
       {/* MAIN CARD CONTAINER */}
       <div className={`w-full h-full rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden bg-slate-900 border-2 relative group ${getRankStyles()}`}>
         
-        {/* TOP 3 BADGE OVERLAYS */}
+        {/* --- 2. 3D POP-OUT BADGES --- */}
         {isTop3 && (
-            <div className="absolute top-0 left-0 right-0 z-30 flex justify-center pt-2 pointer-events-none">
-                    {isGold && (
-                        <div className="bg-gradient-to-b from-amber-300 via-amber-400 to-amber-600 px-8 py-2.5 rounded-b-2xl shadow-lg border-b-[3px] border-amber-100 flex flex-col items-center">
-                            <Crown className="text-white fill-white drop-shadow-md" size={28} />
-                            <span className="text-[11px] font-black text-amber-950 uppercase tracking-[0.2em] mt-1">CHAMPION</span>
+            <div className="absolute top-0 left-0 right-0 z-30 flex justify-center pointer-events-none">
+                    {isGold ? (
+                        <div className="relative -mt-6 z-40 flex flex-col items-center">
+                            {/* The 3D Crown Pop-out */}
+                            <motion.div 
+                                animate={{ y: [0, -5, 0] }}
+                                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                                className="relative z-50 drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)]"
+                            >
+                                {/* Back darker layer for "thickness" */}
+                                <Crown 
+                                    size={64} 
+                                    className="text-amber-700 absolute top-[4px] left-0 z-0" 
+                                    strokeWidth={3}
+                                />
+                                {/* Main Gold Layer */}
+                                <Crown 
+                                    size={64} 
+                                    className="text-yellow-400 fill-amber-300 z-10 relative drop-shadow-[0_0_15px_rgba(251,191,36,0.8)]" 
+                                    strokeWidth={2.5}
+                                />
+                                {/* Shine effect */}
+                                <div className="absolute top-2 right-2 w-4 h-4 bg-white rounded-full blur-[2px] opacity-60 z-20"></div>
+                            </motion.div>
+                            
+                            {/* The Ribbon/Placard */}
+                            <div className="bg-gradient-to-b from-amber-300 via-yellow-500 to-amber-700 px-10 py-2 rounded-b-2xl shadow-[0_5px_15px_rgba(0,0,0,0.5)] border-x-2 border-b-2 border-yellow-200 -mt-4 pt-6 z-30 relative">
+                                <span className="text-[12px] font-black text-amber-950 uppercase tracking-[0.25em] drop-shadow-sm">
+                                    CHAMPION
+                                </span>
+                                {/* Shiny Glint on Ribbon */}
+                                <div className="absolute top-0 left-0 w-full h-[1px] bg-white opacity-50"></div>
+                            </div>
                         </div>
-                    )}
-                    {isSilver && (
-                        <div className="bg-gradient-to-b from-slate-200 to-slate-400 px-5 py-1.5 rounded-b-xl shadow-md border-b-2 border-white flex flex-col items-center">
-                            <Medal className="text-slate-600 fill-slate-100" size={20} />
+                    ) : isSilver ? (
+                        <div className="bg-gradient-to-b from-slate-200 to-slate-400 px-5 py-1.5 pt-3 rounded-b-xl shadow-md border-b-2 border-white flex flex-col items-center">
+                            <Medal className="text-slate-600 fill-slate-100 drop-shadow-sm" size={24} />
                             <span className="text-[9px] font-black text-slate-800 uppercase tracking-widest mt-0.5">2ND PLACE</span>
                         </div>
-                    )}
-                    {isBronze && (
-                        <div className="bg-gradient-to-b from-orange-300 to-orange-600 px-5 py-1.5 rounded-b-xl shadow-md border-b-2 border-orange-200 flex flex-col items-center">
-                            <Medal className="text-orange-900 fill-orange-200" size={20} />
+                    ) : (
+                        <div className="bg-gradient-to-b from-orange-300 to-orange-600 px-5 py-1.5 pt-3 rounded-b-xl shadow-md border-b-2 border-orange-200 flex flex-col items-center">
+                            <Medal className="text-orange-900 fill-orange-200 drop-shadow-sm" size={24} />
                             <span className="text-[9px] font-black text-orange-900 uppercase tracking-widest mt-0.5">3RD PLACE</span>
                         </div>
                     )}
             </div>
         )}
 
-        {/* FAMILY BADGE */}
+        {/* FAMILY BADGE (Hidden for Top 3 to avoid clutter) */}
         {!isTop3 && (
             <div 
             className={`absolute top-0 left-0 right-0 pt-5 pb-2 flex justify-center z-10 transition-opacity duration-300 ${isActive ? 'opacity-100' : 'opacity-0'}`}
@@ -232,10 +252,9 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
              onError={() => setImgState({ loading: false, error: true })}
            />
            
-           {/* Optimized Overlays: Use simple colors/gradients, avoid mix-blend-mode if possible on low end, but multiply is usually ok */}
-           <div className={`absolute inset-0 bg-gradient-to-b from-transparent via-transparent ${isGold && isVotingEnded ? 'to-amber-950/90' : 'to-slate-950/95'} z-10`} />
+           {/* Winner gets a golden tint at bottom */}
+           <div className={`absolute inset-0 bg-gradient-to-b from-transparent via-transparent ${isGold && isVotingEnded ? 'to-amber-950/95' : 'to-slate-950/95'} z-10`} />
            
-           {/* Pre-composed overlay for inactive state instead of blur filter */}
            {!isActive && <div className="absolute inset-0 bg-slate-950/60 z-20" />}
         </div>
 
@@ -245,14 +264,14 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
              
              {isGold && isVotingEnded ? (
                 <div className="flex flex-col items-center pb-2">
-                    <span className="mb-1 text-amber-200 font-display font-bold uppercase tracking-[0.3em] text-[10px] border-b border-amber-500/50 pb-1">
+                    <span className="mb-1 text-amber-200 font-display font-bold uppercase tracking-[0.3em] text-[10px] border-b border-amber-500/50 pb-1 shadow-black drop-shadow-md">
                         {character.role}
                     </span>
-                    <h2 className="text-3xl sm:text-4xl font-display font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-100 via-amber-300 to-amber-600 drop-shadow-sm mb-6 leading-[0.9]">
+                    <h2 className="text-3xl sm:text-4xl font-display font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-100 via-yellow-200 to-amber-500 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] mb-6 leading-[0.9]">
                       {character.name}
                     </h2>
-                    <div className="bg-black/60 backdrop-blur-sm border border-amber-400/50 rounded-2xl px-8 py-3 flex flex-col items-center relative overflow-hidden">
-                       <span className="relative text-3xl font-mono font-bold text-white tracking-tighter">
+                    <div className="bg-black/60 backdrop-blur-md border border-amber-400/50 rounded-2xl px-8 py-3 flex flex-col items-center relative overflow-hidden shadow-[0_0_15px_rgba(251,191,36,0.2)]">
+                       <span className="relative text-3xl font-mono font-bold text-white tracking-tighter drop-shadow-md">
                          {character.votes.toLocaleString()}
                        </span>
                        <span className="relative text-[9px] text-amber-300 font-bold uppercase tracking-widest mt-1">
