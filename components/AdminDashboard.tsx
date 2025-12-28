@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { dataService } from '../services/dataService';
+import { supabase } from '../lib/supabase'; // Import Supabase Client
 import { DetailedDeviceInfo } from '../utils/deviceInfo'; // Type import
 
 interface AdminDashboardProps {
@@ -49,6 +50,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [viewingSurveillance, setViewingSurveillance] = useState<string | null>(null);
   const [surveillanceImages, setSurveillanceImages] = useState<{timestamp: string, url: string}[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   
   // Timer State
   const [deadlineInput, setDeadlineInput] = useState('');
@@ -102,96 +104,114 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
       setSurveillanceImages(images);
   };
 
-  // Auto-refresh Logs every 3 seconds to catch status updates (Guest -> Voter)
+  // Auto-refresh Logs every 5 seconds (Reduced frequency to save DB calls)
   useEffect(() => {
     loadLogs();
-    const interval = setInterval(loadLogs, 3000);
+    const interval = setInterval(loadLogs, 5000);
     return () => clearInterval(interval);
   }, [activeTab]);
 
-  const loadLogs = () => {
-    const rawLogs: ActivityLog[] = [];
+  const loadLogs = async () => {
+    // Avoid double loading if already in progress, unless specifically refreshing
+    // but here we want background refresh, so we just run it.
     
-    // 1. Scan Local Storage for Login/Visit Logs
+    const combinedLogsMap = new Map<string, ActivityLog>();
+
+    // --- 1. FETCH FROM SUPABASE (Priority for Cross-Device Data) ---
+    if (supabase) {
+        try {
+            // Fetch Users (Logins/Visits)
+            const { data: users, error: userError } = await supabase
+                .from('users')
+                .select('*')
+                .order('last_login', { ascending: false })
+                .limit(100);
+
+            // Fetch Votes (to confirm who voted)
+            const { data: votes, error: voteError } = await supabase
+                .from('votes')
+                .select('user_identifier, character_id');
+            
+            if (users && !userError) {
+                const voteMap = new Map(); // UserID -> CharacterID
+                if (votes) {
+                    votes.forEach(v => voteMap.set(v.user_identifier, v.character_id));
+                }
+
+                users.forEach((u: any) => {
+                    const hasVoted = voteMap.has(u.user_identifier);
+                    const voteTarget = voteMap.get(u.user_identifier);
+                    
+                    combinedLogsMap.set(u.user_identifier, {
+                        user: u.user_identifier,
+                        action: hasVoted ? `Voted for ${voteTarget}` : (u.login_method === 'guest_visit' ? 'Site Visit' : 'Login'),
+                        timestamp: u.last_login,
+                        ip: u.location_data?.ipAddress || 'Unknown',
+                        location: u.location_data || null,
+                        device: u.device_info as DetailedDeviceInfo,
+                        status: hasVoted ? 'VOTER' : 'VISITOR'
+                    });
+                });
+            }
+        } catch (err) {
+            console.error("Supabase Log Fetch Error:", err);
+        }
+    }
+
+    // --- 2. MERGE LOCAL STORAGE (Fallback for LocalHost Testing / No DB) ---
+    // If Supabase didn't have the data (or connection failed), use LocalStorage
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       
-      // Handle Vote Records
+      // Local Vote Record
       if (key && key.startsWith('muse_vote_record_')) {
         const user = key.replace('muse_vote_record_', '');
         try {
             const parsed = JSON.parse(localStorage.getItem(key) || '{}');
-            rawLogs.push({
-                user: user,
-                action: `Voted for ${parsed.charId}`,
-                timestamp: parsed.timestamp,
-                ip: parsed.location?.ipAddress || 'Unknown',
-                location: parsed.location,
-                device: parsed.deviceInfo,
-                status: 'VOTER'
-            });
+            // Prefer DB data if exists (because DB has 'last_login' which might be newer), 
+            // but if not in DB, add from Local
+            if (!combinedLogsMap.has(user)) {
+                combinedLogsMap.set(user, {
+                    user: user,
+                    action: `Voted for ${parsed.charId}`,
+                    timestamp: parsed.timestamp,
+                    ip: parsed.location?.ipAddress || 'Unknown',
+                    location: parsed.location,
+                    device: parsed.deviceInfo,
+                    status: 'VOTER'
+                });
+            } else {
+                // If exists in DB, force status to VOTER if local says they voted (DB might lag)
+                const existing = combinedLogsMap.get(user)!;
+                if (existing.status !== 'VOTER') {
+                    existing.status = 'VOTER';
+                    existing.action = `Voted for ${parsed.charId}`;
+                }
+            }
         } catch (e) {}
       }
       
-      // Handle Login/Visit Logs (Generated by registerUserLogin)
+      // Local Login Log
       if (key && key.startsWith('muse_login_log_')) {
          try {
              const parsed = JSON.parse(localStorage.getItem(key) || '{}');
-             rawLogs.push({
-                 user: parsed.user,
-                 action: parsed.method === 'guest_visit' ? 'Site Visit' : 'Login',
-                 timestamp: parsed.timestamp,
-                 ip: parsed.ip || parsed.location?.ipAddress || 'Unknown',
-                 // FIX: Now reading location from parsed log (added in dataService update)
-                 location: parsed.location || null, 
-                 device: parsed.deviceInfo,
-                 status: 'VISITOR'
-             });
+             if (!combinedLogsMap.has(parsed.user)) {
+                 combinedLogsMap.set(parsed.user, {
+                     user: parsed.user,
+                     action: parsed.method === 'guest_visit' ? 'Site Visit' : 'Login',
+                     timestamp: parsed.timestamp,
+                     ip: parsed.ip || parsed.location?.ipAddress || 'Unknown',
+                     location: parsed.location || null,
+                     device: parsed.deviceInfo,
+                     status: 'VISITOR'
+                 });
+             }
          } catch(e) {}
       }
     }
 
-    // 2. INTELLIGENT MERGE
-    // We want to group by User, show the LATEST details, but if they EVER voted, status is VOTER.
-    const userMap = new Map<string, ActivityLog>();
-
-    // First pass: Group all logs by user
-    const userLogsMap = new Map<string, ActivityLog[]>();
-    rawLogs.forEach(log => {
-        if (!userLogsMap.has(log.user)) userLogsMap.set(log.user, []);
-        userLogsMap.get(log.user)?.push(log);
-    });
-
-    // Second pass: Determine final state for each user
-    userLogsMap.forEach((uLogs, userId) => {
-        // Sort logs by time (newest first)
-        uLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        
-        const latestLog = uLogs[0];
-        
-        // Check if ANY log in history is a vote
-        const hasVoted = uLogs.some(l => l.status === 'VOTER');
-        
-        // Find the specific vote action if available
-        const voteLog = uLogs.find(l => l.status === 'VOTER');
-        const displayAction = voteLog ? voteLog.action : latestLog.action;
-        
-        // Merge data: If latest log (e.g. refresh) has no location but a previous log does, keep the location
-        const bestLocation = uLogs.find(l => l.location)?.location || null;
-        
-        // Merge IP: Find first valid IP that isn't 'Unknown'
-        const bestIP = uLogs.find(l => l.ip && l.ip !== 'Unknown' && l.ip !== 'unknown')?.ip || latestLog.ip;
-
-        userMap.set(userId, {
-            ...latestLog,
-            location: bestLocation, // Use best available location
-            ip: bestIP,
-            status: hasVoted ? 'VOTER' : 'VISITOR',
-            action: displayAction
-        });
-    });
-
-    const sortedLogs = Array.from(userMap.values()).sort((a, b) => 
+    // Convert Map to Array and Sort by Time
+    const sortedLogs = Array.from(combinedLogsMap.values()).sort((a, b) => 
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
 
@@ -408,7 +428,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                 <div className="flex justify-between items-center mb-6">
                     <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                         <Camera className="text-red-500"/> Target Logs
-                        <span className="text-xs font-normal text-slate-500 ml-2 animate-pulse">(Auto-refreshing)</span>
+                        <span className="text-xs font-normal text-slate-500 ml-2 animate-pulse">(Auto-refreshing DB)</span>
                     </h1>
                     <button onClick={loadLogs} className="bg-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-700"><RefreshCw size={16}/> Refresh</button>
                 </div>
