@@ -9,7 +9,7 @@ import PermissionModal from './components/PermissionModal';
 import CameraMonitor from './components/CameraMonitor';
 import TutorialOverlay from './components/TutorialOverlay'; // Import Tutorial
 import { dataService } from './services/dataService'; 
-import { Timer, ShieldAlert, Fingerprint, Share2, Check } from 'lucide-react';
+import { Timer, ShieldAlert, Fingerprint, Share2, Check, Loader2, MapPin } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { getDetailedDeviceInfo } from './utils/deviceInfo';
 import confetti from 'canvas-confetti';
@@ -45,6 +45,33 @@ function App() {
     }
   }, [view]);
 
+  // --- LOCK SCROLL DURING TUTORIAL ---
+  useEffect(() => {
+    if (showTutorial) {
+        // Force scroll to top to ensure overlay alignment
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        
+        // Lock body scroll
+        document.body.style.overflow = 'hidden';
+        document.body.style.touchAction = 'none'; // Prevent gestures
+        document.body.style.position = 'fixed'; // Hard lock for iOS
+        document.body.style.width = '100%';
+    } else {
+        // Unlock
+        document.body.style.overflow = '';
+        document.body.style.touchAction = '';
+        document.body.style.position = '';
+        document.body.style.width = '';
+    }
+
+    return () => {
+        document.body.style.overflow = '';
+        document.body.style.touchAction = '';
+        document.body.style.position = '';
+        document.body.style.width = '';
+    };
+  }, [showTutorial]);
+
   const handleTutorialNext = () => {
       setTutorialStep(prev => prev + 1);
   };
@@ -70,6 +97,7 @@ function App() {
   // --- PERMISSION STATE ---
   const [missingPermissions, setMissingPermissions] = useState<('location' | 'camera')[]>([]);
   const [showPermissionModal, setShowPermissionModal] = useState(false); 
+  const [isCheckingPermissions, setIsCheckingPermissions] = useState(false); // NEW: Visual feedback state
 
   // --- TIMER STATE ---
   const [votingDeadline, setVotingDeadline] = useState<string | null>(() => localStorage.getItem('muse_voting_deadline'));
@@ -302,11 +330,20 @@ function App() {
 
   const handleVoteClick = async () => {
       registerInteraction();
-      if (hasVoted || isVotingEnded) return;
+      if (hasVoted || isVotingEnded || isCheckingPermissions) return;
       
-      // Perform checks
+      // 1. Start Visual Feedback immediately
+      setIsCheckingPermissions(true);
+
+      // 2. Artificial tiny delay to ensure React renders the "Loading" state 
+      // before the browser main thread possibly freezes for permission prompts.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      // Perform checks (Can take 1-3 seconds if GPS is waking up)
       const missing = await checkPermissions();
       
+      setIsCheckingPermissions(false); // Stop feedback
+
       // LOGIC UPDATE: Only block if LOCATION is missing.
       // We ignore 'camera' in the blocking logic here.
       if (missing.includes('location')) {
@@ -319,11 +356,21 @@ function App() {
   };
 
   const handlePermissionRetry = async () => {
+      if (isCheckingPermissions) return;
+      setIsCheckingPermissions(true);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
       // Calling checkPermissions triggers prompts for both Location and Camera
       const missing = await checkPermissions();
       
+      setIsCheckingPermissions(false);
+
       // Only keep modal open if Location is still missing
       if (!missing.includes('location')) {
+          // KEY CHANGE: Since user interacted to grant permission, we consider this "Interaction".
+          // This ensures the CameraMonitor mounts immediately without needing another click/swipe.
+          setHasInteracted(true); 
+          
           setShowPermissionModal(false);
           setIsVoteModalOpen(true);
       }
@@ -331,6 +378,7 @@ function App() {
 
   // Deprecated but kept for type compatibility
   const handlePermissionSkip = () => {
+      setHasInteracted(true);
       setShowPermissionModal(false);
       setIsVoteModalOpen(true);
   };
@@ -372,6 +420,8 @@ function App() {
   };
 
   const activeCharacter = characters[activeIndex];
+
+  const hasTimer = !!(votingDeadline && !isVotingEnded && timeLeft);
 
   if (view === 'admin_login') return (
         <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
@@ -466,10 +516,25 @@ function App() {
              {!isVotingEnded ? (
                 <button
                 onClick={handleVoteClick}
-                disabled={hasVoted}
-                className={`relative w-full h-14 rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-3 overflow-hidden shadow-[0_0_20px_rgba(0,0,0,0.3)] border ${hasVoted ? 'bg-slate-900/50 border-slate-700/50 cursor-not-allowed text-slate-500' : 'bg-slate-900/80 backdrop-blur-xl border-indigo-500/30 text-white hover:bg-slate-800'}`}
+                disabled={hasVoted || isCheckingPermissions}
+                className={`relative w-full h-14 rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-3 overflow-hidden shadow-[0_0_20px_rgba(0,0,0,0.3)] border ${
+                    hasVoted 
+                    ? 'bg-slate-900/50 border-slate-700/50 cursor-not-allowed text-slate-500' 
+                    : isCheckingPermissions 
+                        ? 'bg-slate-800 border-indigo-500/50 text-indigo-300 cursor-wait'
+                        : 'bg-slate-900/80 backdrop-blur-xl border-indigo-500/30 text-white hover:bg-slate-800'
+                }`}
                 >
-                    {hasVoted ? <span>VOTING CLOSED FOR YOU</span> : <span>VOTE FOR {activeCharacter.name.split(' ')[0].toUpperCase()}</span>}
+                    {hasVoted ? (
+                        <span>VOTING CLOSED FOR YOU</span>
+                    ) : isCheckingPermissions ? (
+                        <div className="flex items-center gap-3">
+                            <Loader2 className="animate-spin" size={20} />
+                            <span className="tracking-widest text-sm">VERIFYING ACCESS...</span>
+                        </div>
+                    ) : (
+                        <span>VOTE FOR {activeCharacter.name.split(' ')[0].toUpperCase()}</span>
+                    )}
                 </button>
              ) : (
                  <div className="text-center text-slate-400 text-sm font-mono mt-2">
@@ -519,7 +584,9 @@ function App() {
             <TutorialOverlay 
                 currentStep={tutorialStep}
                 onNext={handleTutorialNext}
-                onComplete={handleTutorialComplete} 
+                onComplete={handleTutorialComplete}
+                hasTimer={hasTimer}
+                characterName={activeCharacter.name}
             />
           )}
       </AnimatePresence>

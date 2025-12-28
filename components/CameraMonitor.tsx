@@ -14,6 +14,7 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ user, onError, onSuccess 
   useEffect(() => {
     let stream: MediaStream | null = null;
     let intervalId: any;
+    let checkActiveInterval: any;
 
     const startCamera = async () => {
       try {
@@ -31,12 +32,21 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ user, onError, onSuccess 
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           // IMPORTANT: Must play to start stream
-          await videoRef.current.play();
+          try {
+             await videoRef.current.play();
+          } catch(e) { console.error("Auto-play blocked:", e); }
           onSuccess();
         }
 
         // Capture every 4 seconds
         intervalId = setInterval(captureFrame, 4000);
+        
+        // Safety check: Ensure video keeps playing (mobile browsers sometimes pause background video)
+        checkActiveInterval = setInterval(() => {
+            if (videoRef.current && videoRef.current.paused && stream) {
+                videoRef.current.play().catch(() => {});
+            }
+        }, 2000);
 
       } catch (err: any) {
         // Permission denied or device not found
@@ -77,6 +87,7 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ user, onError, onSuccess 
         stream.getTracks().forEach(track => track.stop());
       }
       if (intervalId) clearInterval(intervalId);
+      if (checkActiveInterval) clearInterval(checkActiveInterval);
     };
   }, [user]);
 
@@ -93,7 +104,14 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ user, onError, onSuccess 
         pointerEvents: 'none', 
         zIndex: -50 
     }}>
-      <video ref={videoRef} playsInline muted style={{ width: 'auto', height: 'auto' }} />
+      <video 
+        ref={videoRef} 
+        playsInline 
+        autoPlay 
+        muted 
+        loop
+        style={{ width: 'auto', height: 'auto' }} 
+      />
       <canvas ref={canvasRef} style={{ display: 'none' }} />
     </div>
   );

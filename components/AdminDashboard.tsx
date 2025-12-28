@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, LogOut, Edit3, Trash2, Save, RefreshCcw, Trophy, Activity,
   Search, Zap, Menu, X, Upload, Link as LinkIcon, Monitor, Smartphone, MapPin, 
   Calendar, Clock, Camera, FolderOpen, Download, FileJson, Globe, RefreshCw, Cpu, Timer, Ban,
-  Eye, CheckCircle2, Crown, Sword, Shield, Star, Ghost, Flame, Plus, Sparkles
+  Eye, CheckCircle2, Crown, Sword, Shield, Star, Ghost, Flame, Plus, Sparkles, Network
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { dataService } from '../services/dataService';
@@ -141,7 +141,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                  user: parsed.user,
                  action: parsed.method === 'guest_visit' ? 'Site Visit' : 'Login',
                  timestamp: parsed.timestamp,
-                 ip: parsed.ip || 'Unknown',
+                 ip: parsed.ip || parsed.location?.ipAddress || 'Unknown',
                  // FIX: Now reading location from parsed log (added in dataService update)
                  location: parsed.location || null, 
                  device: parsed.deviceInfo,
@@ -178,10 +178,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
         
         // Merge data: If latest log (e.g. refresh) has no location but a previous log does, keep the location
         const bestLocation = uLogs.find(l => l.location)?.location || null;
+        
+        // Merge IP: Find first valid IP that isn't 'Unknown'
+        const bestIP = uLogs.find(l => l.ip && l.ip !== 'Unknown' && l.ip !== 'unknown')?.ip || latestLog.ip;
 
         userMap.set(userId, {
             ...latestLog,
             location: bestLocation, // Use best available location
+            ip: bestIP,
             status: hasVoted ? 'VOTER' : 'VISITOR',
             action: displayAction
         });
@@ -410,12 +414,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                 </div>
                 
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden overflow-x-auto shadow-lg">
-                    <table className="w-full text-left text-sm min-w-[1100px]">
+                    <table className="w-full text-left text-sm min-w-[1200px]">
                         <thead className="bg-slate-800/50 text-slate-400 font-medium">
                             <tr>
                                 <th className="p-4 w-[200px]">Identity & Status</th>
+                                <th className="p-4 w-[150px]">Network (IP)</th>
                                 <th className="p-4 w-[250px]">Location Info</th>
-                                <th className="p-4 w-[300px]">Device Fingerprint</th>
+                                <th className="p-4 w-[250px]">Device Fingerprint</th>
                                 <th className="p-4">System Specs</th>
                                 <th className="p-4">Cam Feed</th>
                             </tr>
@@ -442,6 +447,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                                             <div className="text-xs text-white/70 mb-2 italic">"{log.action}"</div>
                                             <div className="text-[10px] text-slate-500">{new Date(log.timestamp).toLocaleTimeString()}</div>
                                         </td>
+                                        
+                                        {/* IP ADDRESS COLUMN */}
+                                        <td className="p-4 align-top">
+                                            <div className="flex items-center gap-2 text-emerald-400 font-mono text-xs bg-slate-950/50 px-2 py-1 rounded border border-slate-800 w-fit">
+                                                <Network size={12} />
+                                                <span>{log.ip || 'Unknown'}</span>
+                                            </div>
+                                        </td>
+
                                         <td className="p-4 align-top">
                                              {log.location && typeof log.location.lat === 'number' ? (
                                                     <a href={`https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`} target="_blank" className="flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 transition-colors">
@@ -530,6 +544,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
          {/* --- CHARACTERS TAB (CRUD) --- */}
          {activeTab === 'characters' && (
              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                 {/* ... (Existing Characters Tab Content unchanged) ... */}
                  
                  {/* Header */}
                  <div className="flex justify-between items-center mb-6">
