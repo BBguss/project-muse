@@ -432,7 +432,7 @@ export const dataService = {
         .channel('public:characters')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'characters' }, callback)
         .subscribe();
-      return () => { supabase.removeChannel(channel); };
+      return () => { supabase?.removeChannel(channel); };
     }
     return () => {};
   }
