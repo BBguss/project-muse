@@ -1,5 +1,9 @@
 import { Character } from './types';
 
+// NOTE: This data is used as a fallback or for initial loading.
+// For the live app, ensure you run 'dummy_data_seed.sql.txt' in Supabase
+// to populate the database with these exact values.
+
 export const INITIAL_CHARACTERS: Character[] = [
   {
     id: 'c1',

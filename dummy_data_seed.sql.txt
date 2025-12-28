@@ -1,0 +1,127 @@
+-- --------------------------------------------------------
+-- SEED DATA SCRIPT FOR MUSE ROLEPLAY
+-- Copy and Run this in Supabase SQL Editor
+-- This will insert or reset the 10 starter characters
+-- --------------------------------------------------------
+
+INSERT INTO public.characters (character_id, name, role, description, image_url, votes, theme_color, family_name, family_icon)
+VALUES
+(
+    'c1', 
+    'Imperator Valerius Thorne', 
+    'Supreme Leader', 
+    'Pemimpin absolut The Obsidian Order. Dikabarkan telah hidup selama 500 tahun berkat darah naga yang mengalir di tubuhnya. Marga Thorne memegang kendali penuh atas ibukota.', 
+    'https://placehold.co/600x800/2a0a10/FFF?text=Valerius+Thorne', 
+    1250, 
+    'from-red-600 to-rose-950', 
+    'The Obsidian Order', 
+    'crown'
+),
+(
+    'c2', 
+    'General Marcus Steel', 
+    'Grand Marshal', 
+    'Ahli strategi perang yang tidak pernah kalah dalam pertempuran. Marga Steel dikenal sebagai penempa senjata legendaris yang dapat membelah langit.', 
+    'https://placehold.co/600x800/1e293b/FFF?text=Marcus+Steel', 
+    980, 
+    'from-slate-500 to-slate-900', 
+    'The Obsidian Order', 
+    'sword'
+),
+(
+    'c3', 
+    'Lady Isabella Vane', 
+    'Spymaster', 
+    'Wanita misterius yang mengendalikan jaringan informasi bawah tanah. Marga Vane memiliki kemampuan leluhur untuk memanipulasi bayangan.', 
+    'https://placehold.co/600x800/4c1d95/FFF?text=Isabella+Vane', 
+    1120, 
+    'from-violet-600 to-purple-950', 
+    'The Obsidian Order', 
+    'ghost'
+),
+(
+    'c4', 
+    'Archmage Solonius Light', 
+    'High Arcanist', 
+    'Penyihir agung yang menjaga keseimbangan energi sihir kerajaan. Marga Light adalah satu-satunya keturunan yang bisa menyentuh Kristal Inti tanpa terbakar.', 
+    'https://placehold.co/600x800/fbbf24/FFF?text=Solonius+Light', 
+    890, 
+    'from-amber-400 to-yellow-700', 
+    'The Obsidian Order', 
+    'zap'
+),
+(
+    'c5', 
+    'Duchess Elara Moon', 
+    'Diplomat', 
+    'Wajah publik dari Order yang mempesona namun mematikan. Marga Moon memiliki koneksi spiritual dengan pasang surut lautan dan emosi manusia.', 
+    'https://placehold.co/600x800/0ea5e9/FFF?text=Elara+Moon', 
+    1050, 
+    'from-sky-400 to-blue-900', 
+    'The Obsidian Order', 
+    'star'
+),
+(
+    'c6', 
+    'Seraphina Blackwood', 
+    'Executioner', 
+    'Pedang keadilan yang tak kenal ampun. Marga Blackwood dikutuk untuk tidak bisa merasakan sakit fisik, menjadikan mereka prajurit garis depan yang sempurna.', 
+    'https://placehold.co/600x800/18181b/FFF?text=Seraphina+Blackwood', 
+    750, 
+    'from-zinc-600 to-black', 
+    'The Obsidian Order', 
+    'sword'
+),
+(
+    'c7', 
+    'Lord Draven Storm', 
+    'Admiral', 
+    'Penguasa lautan utara yang beraliansi dengan Order. Marga Storm dapat memanggil badai petir saat amarah mereka memuncak.', 
+    'https://placehold.co/600x800/1e3a8a/FFF?text=Draven+Storm', 
+    680, 
+    'from-blue-600 to-indigo-900', 
+    'The Obsidian Order', 
+    'shield'
+),
+(
+    'c8', 
+    'Priestess Lyra Grace', 
+    'Healer', 
+    'Satu-satunya cahaya murni di dalam Order yang gelap. Marga Grace memiliki darah malaikat yang dapat menyembuhkan wabah apapun.', 
+    'https://placehold.co/600x800/f43f5e/FFF?text=Lyra+Grace', 
+    1340, 
+    'from-rose-400 to-pink-800', 
+    'The Obsidian Order', 
+    'flame'
+),
+(
+    'c9', 
+    'Baron Victor Ironfist', 
+    'Treasurer', 
+    'Bankir jenius yang mendanai seluruh operasi militer. Marga Ironfist dapat mengubah logam biasa menjadi emas murni dengan sentuhan alkimia.', 
+    'https://placehold.co/600x800/ca8a04/FFF?text=Victor+Ironfist', 
+    520, 
+    'from-yellow-600 to-amber-900', 
+    'The Obsidian Order', 
+    'shield'
+),
+(
+    'c10', 
+    'Rogue Kaelthas Void', 
+    'Infiltrator', 
+    'Tidak ada tembok yang tidak bisa ia tembus. Marga Void lahir di dimensi lain dan baru muncul ke dunia ini saat dipanggil oleh Order.', 
+    'https://placehold.co/600x800/312e81/FFF?text=Kaelthas+Void', 
+    915, 
+    'from-indigo-600 to-violet-950', 
+    'The Obsidian Order', 
+    'ghost'
+)
+ON CONFLICT (character_id) DO UPDATE SET
+    name = EXCLUDED.name,
+    role = EXCLUDED.role,
+    description = EXCLUDED.description,
+    image_url = EXCLUDED.image_url,
+    votes = EXCLUDED.votes, -- This resets votes to initial state. Remove this line if you want to keep current votes.
+    theme_color = EXCLUDED.theme_color,
+    family_name = EXCLUDED.family_name,
+    family_icon = EXCLUDED.family_icon;
