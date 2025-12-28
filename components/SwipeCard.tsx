@@ -124,37 +124,6 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
   const isBronze = rank === 3;
   const isTop3 = isGold || isSilver || isBronze;
 
-  // --- ACTIVE EFFECT STYLING (The "Wow" Factor) ---
-  const getActiveEffectStyles = () => {
-      if (!isActive || isTop3) return ''; // Don't override rank styles
-      
-      switch (character.activeEffect) {
-          case 'fire':
-              return 'border-orange-500 shadow-[0_0_35px_rgba(249,115,22,0.6)] ring-2 ring-orange-400/50 animate-[pulse_2s_cubic-bezier(0.4,0,0.6,1)_infinite]';
-          case 'lightning':
-              return 'border-cyan-400 shadow-[0_0_25px_rgba(34,211,238,0.7)] ring-2 ring-blue-300/60 animate-[pulse_0.1s_ease-in-out_infinite]';
-          case 'shadow':
-              return 'border-purple-900 shadow-[0_0_40px_rgba(88,28,135,0.8)] ring-2 ring-black/80 grayscale-[0.2]';
-          default:
-              return 'border-indigo-400/50 shadow-[0_0_25px_rgba(99,102,241,0.2)] ring-1 ring-white/10';
-      }
-  };
-
-  // Defines border and glow based on rank OR active effect
-  const getCardStyles = () => {
-      if (isGold) return 'border-amber-300 shadow-[0_0_50px_rgba(251,191,36,0.5)] ring-2 ring-amber-400/50'; 
-      if (isSilver) return 'border-slate-300 shadow-[0_0_15px_rgba(203,213,225,0.3)] ring-1 ring-slate-300/30';
-      if (isBronze) return 'border-orange-700 shadow-[0_0_15px_rgba(194,65,12,0.3)] ring-1 ring-orange-700/30';
-      
-      // If no rank, check for special active effects
-      if (isActive) {
-          return getActiveEffectStyles();
-      }
-      
-      // Inactive / Background
-      return 'border-slate-800 shadow-xl';
-  };
-
   // Resolve Family Icon
   const FamilyIconComponent = IconMap[character.familyIcon || 'crown'] || Crown;
 
@@ -162,6 +131,85 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
   const safeName = character.name || '?';
   const firstChar = String(Array.from(safeName)[0] || '?'); 
   const fallbackUrl = `https://placehold.co/600x800/1e293b/cbd5e1?text=${encodeURIComponent(firstChar.toUpperCase())}`;
+
+  // --- RENDER HELPERS FOR EFFECTS ---
+  
+  const renderActiveEffectLayer = () => {
+      if (!isActive || isTop3) return null; // Don't show on top of rank badges
+
+      switch (character.activeEffect) {
+          case 'fire':
+              return (
+                  <>
+                      {/* Burning Core Glow */}
+                      <div className="absolute -inset-[3px] rounded-[2rem] bg-gradient-to-t from-orange-600 to-red-600 blur-sm z-[-1]" />
+                      
+                      {/* Moving Conic Gradient (The Swirling Fire) */}
+                      <div className="absolute -inset-[6px] rounded-[2.2rem] z-[-2] overflow-hidden opacity-80">
+                          <div className="absolute inset-[-50%] w-[200%] h-[200%] bg-[conic-gradient(from_0deg,transparent_0deg,transparent_60deg,#f59e0b_120deg,#ef4444_180deg,transparent_240deg,transparent_360deg)] animate-[spin_3s_linear_infinite]" />
+                      </div>
+                      
+                      {/* Outer Heat Haze */}
+                      <div className="absolute -inset-[20px] bg-orange-500/20 blur-2xl z-[-3] animate-pulse" />
+                      
+                      {/* Top Sparks Simulation (Simple Dots) */}
+                      <div className="absolute -top-10 left-1/2 w-1 h-1 bg-yellow-300 shadow-[0_0_10px_orange] rounded-full animate-[ping_1.5s_infinite]" />
+                  </>
+              );
+          
+          case 'lightning':
+              return (
+                  <>
+                      {/* Electric Core */}
+                      <div className="absolute -inset-[2px] rounded-[2rem] border-2 border-cyan-300 z-[-1] shadow-[0_0_15px_rgba(34,211,238,0.8)]" />
+                      
+                      {/* Jittering Bolt Effect */}
+                      <div className="absolute -inset-[10px] rounded-[2.2rem] z-[-2] opacity-60 mix-blend-screen">
+                          <div className="absolute inset-[-50%] w-[200%] h-[200%] bg-[conic-gradient(from_180deg,transparent_0deg,#06b6d4_70deg,white_80deg,#06b6d4_90deg,transparent_180deg)] animate-[spin_0.5s_linear_infinite]" />
+                      </div>
+
+                      {/* Ambient Flash */}
+                      <div className="absolute -inset-[30px] bg-blue-500/10 blur-xl z-[-3] animate-[pulse_0.2s_ease-in-out_infinite]" />
+                  </>
+              );
+
+          case 'shadow':
+              return (
+                  <>
+                      {/* Dark Void Border */}
+                      <div className="absolute -inset-[2px] rounded-[2rem] bg-black z-[-1] shadow-[0_0_20px_rgba(0,0,0,1)]" />
+                      
+                      {/* Slow Pulsing Aura */}
+                      <div className="absolute -inset-[12px] rounded-[2.5rem] bg-purple-900/40 blur-lg z-[-2] animate-[pulse_4s_infinite]" />
+                      
+                      {/* Smoke Effect (Rotating dark gradient) */}
+                      <div className="absolute -inset-[8px] rounded-[2.2rem] z-[-2] overflow-hidden opacity-60">
+                          <div className="absolute inset-[-50%] w-[200%] h-[200%] bg-[conic-gradient(from_0deg,transparent_0deg,#581c87_120deg,black_180deg,transparent_240deg)] animate-[spin_6s_linear_infinite_reverse]" />
+                      </div>
+                  </>
+              );
+
+          default:
+              // Standard Active Glow (No special effect)
+              return (
+                <div className="absolute -inset-[1px] rounded-[2rem] border border-indigo-500/30 z-[-1] shadow-[0_0_25px_rgba(99,102,241,0.2)]" />
+              );
+      }
+  };
+
+  // Border Style Logic for the Card Container itself
+  const getCardBorderClass = () => {
+    if (isGold) return 'border-amber-300 shadow-[0_0_50px_rgba(251,191,36,0.5)]';
+    if (isSilver) return 'border-slate-300 shadow-[0_0_15px_rgba(203,213,225,0.3)]';
+    if (isBronze) return 'border-orange-700 shadow-[0_0_15px_rgba(194,65,12,0.3)]';
+    
+    // If Active Effect is ON, we make the main border transparent so the effect layer (rendered above) shows through clearly
+    if (isActive && character.activeEffect && character.activeEffect !== 'none') {
+        return 'border-transparent'; 
+    }
+
+    return 'border-slate-800 shadow-xl';
+  };
 
   return (
     <motion.div
@@ -183,7 +231,10 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
       whileTap={isActive && !isVotingEnded ? { scale: 0.98, cursor: "grabbing" } : {}}
     >
       
-      {/* --- 1. SPOTLIGHT GOD RAYS FOR WINNER --- */}
+      {/* --- RENDER ACTIVE EFFECT "AURA" LAYER --- */}
+      {renderActiveEffectLayer()}
+
+      {/* --- SPOTLIGHT GOD RAYS FOR WINNER (GOLD) --- */}
       <AnimatePresence>
           {isGold && isActive && (
               <div className="absolute -inset-[150%] z-[-20] flex items-center justify-center pointer-events-none opacity-60 mix-blend-screen">
@@ -192,33 +243,12 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
           )}
       </AnimatePresence>
 
-      {/* --- ACTIVE EFFECT OVERLAYS (Burning, Lightning, etc.) --- */}
-      {isActive && !isTop3 && character.activeEffect === 'fire' && (
-         <>
-             <div className="absolute -inset-1 bg-orange-600 opacity-20 blur-xl z-[-10] animate-pulse" />
-             <div className="absolute inset-0 z-[16] pointer-events-none mix-blend-color-dodge opacity-30 bg-[radial-gradient(ellipse_at_bottom,rgba(255,100,0,0.5)_0%,transparent_70%)]" />
-         </>
-      )}
-      {isActive && !isTop3 && character.activeEffect === 'lightning' && (
-         <div className="absolute -inset-2 bg-cyan-400 opacity-10 blur-xl z-[-10] animate-[pulse_0.2s_ease-in-out_infinite]" />
-      )}
-      {isActive && !isTop3 && character.activeEffect === 'shadow' && (
-         <div className="absolute -inset-4 bg-black opacity-60 blur-2xl z-[-10]" />
-      )}
-
-
-      {/* Static Glow Effect - Ambient for non-winners / no-effect */}
-      {isActive && !isTop3 && !character.activeEffect && (
-         <div className={`absolute -inset-1 bg-gradient-to-t ${character.themeColor} opacity-20 rounded-[3rem] -z-10 blur-xl`} />
-      )}
-
-      {/* --- 2. 3D POP-OUT BADGES --- */}
+      {/* --- 3D POP-OUT BADGES (Top 3) --- */}
       {isTop3 && (
         <div className="absolute top-0 left-0 right-0 z-[100] flex justify-center pointer-events-none">
                 {isGold ? (
                     <div className="relative -mt-12 flex flex-col items-center">
                         <div className="absolute top-6 left-1/2 -translate-x-1/2 w-28 h-28 bg-amber-400/50 blur-[40px] rounded-full z-0 animate-pulse" />
-                        
                         <motion.div 
                             animate={{ y: [-8, 0, -8], scale: [1, 1.05, 1], rotate: [0, 2, -2, 0] }}
                             transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
@@ -226,13 +256,9 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
                         >
                             <Crown size={90} className="text-amber-900 absolute top-[3px] left-0 z-0 opacity-80" strokeWidth={4} />
                             <Crown size={90} className="text-yellow-300 fill-amber-400 z-10 relative drop-shadow-[0_0_20px_rgba(251,191,36,0.8)]" strokeWidth={2} />
-                            <div className="absolute top-4 right-4 w-6 h-6 bg-white rounded-full blur-[4px] opacity-70 z-20 animate-pulse"></div>
-                            <div className="absolute top-4 left-4 w-3 h-3 bg-white rounded-full blur-[2px] opacity-50 z-20"></div>
                         </motion.div>
-                        
                         <div className="bg-gradient-to-b from-amber-300 via-yellow-500 to-amber-700 px-10 py-2 pb-3 rounded-b-3xl shadow-[0_10px_20px_rgba(0,0,0,0.6)] border-x-[3px] border-b-[3px] border-yellow-200 -mt-6 pt-8 z-40 relative">
                             <span className="text-[14px] font-black text-amber-950 uppercase tracking-[0.25em] drop-shadow-sm">CHAMPION</span>
-                            <div className="absolute top-0 left-0 w-full h-[1px] bg-white opacity-60"></div>
                         </div>
                     </div>
                 ) : isSilver ? (
@@ -250,16 +276,14 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
       )}
       
       {/* MAIN CARD CONTAINER */}
-      <div className={`w-full h-full rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden bg-slate-900 border-2 relative group transition-all duration-300 ${getCardStyles()}`}>
+      <div className={`w-full h-full rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden bg-slate-900 border-2 relative group transition-all duration-300 ${getCardBorderClass()}`}>
         
-        {/* --- WOW FACTOR: FILM GRAIN / NOISE TEXTURE --- */}
-        {/* Adds cinematic texture so it doesn't look like a flat CSS gradient */}
+        {/* Film Grain Texture */}
         <div className="absolute inset-0 z-[5] opacity-[0.08] pointer-events-none mix-blend-overlay"
              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }}>
         </div>
 
-        {/* --- WOW FACTOR: HOLOGRAPHIC SHEEN (Active Only) --- */}
-        {/* A moving band of light that sweeps across the card */}
+        {/* Holographic Sheen (Active Only) */}
         {isActive && (
             <div className="absolute inset-0 z-[15] pointer-events-none overflow-hidden rounded-[1.4rem] sm:rounded-[1.9rem]">
                 <div className="absolute -inset-[100%] w-[300%] h-[300%] bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-[-25deg] animate-[sheen_6s_infinite_linear]" />
