@@ -45,8 +45,14 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
   // --- 3D TILT INTERACTION STATE (For Winner Only) ---
   const x = useMotionValue(0);
   const y = useMotionValue(0);
-  const rotateX = useTransform(y, [-100, 100], [10, -10]);
-  const rotateY = useTransform(x, [-100, 100], [-10, 10]);
+  
+  // Reduced rotation range for more stability, focused on depth
+  const rotateX = useTransform(y, [-100, 100], [5, -5]);
+  const rotateY = useTransform(x, [-100, 100], [-5, 5]);
+
+  // Parallax Values for Image (Moves opposite to tilt)
+  const imageX = useTransform(x, [-100, 100], [-15, 15]);
+  const imageY = useTransform(y, [-100, 100], [-15, 15]);
 
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
       if (!isGold || !isActive) return;
@@ -163,8 +169,8 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
       style={{ 
         rotateX: isGold && isActive ? rotateX : 0, 
         rotateY: isGold && isActive ? rotateY : 0,
-        transformStyle: "preserve-3d", // Critical for 3D effect
-        perspective: 1000
+        transformStyle: "preserve-3d", 
+        perspective: 1200 // Increased perspective for deeper look
       }}
       transition={{ type: "spring", stiffness: 200, damping: 25 }}
       className="absolute w-[72%] max-w-[280px] aspect-[9/14] cursor-pointer origin-bottom touch-none select-none"
@@ -223,12 +229,15 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
         </div>
       )}
       
-      {/* MAIN CARD CONTAINER */}
-      <div className={`w-full h-full rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden bg-slate-900 border-2 relative group transition-all duration-300 ${getCardBorderClass()}`}>
+      {/* MAIN CARD CONTAINER - Has to be 3D compatible */}
+      <div 
+        className={`w-full h-full rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden bg-slate-900 border-2 relative group transition-all duration-300 ${getCardBorderClass()}`}
+        style={{ transformStyle: 'preserve-3d' }}
+      >
         
         {/* Particle Effects for Winner */}
         {isGold && isVotingEnded && (
-           <div className="absolute inset-0 pointer-events-none z-[10] overflow-hidden">
+           <div className="absolute inset-0 pointer-events-none z-[10] overflow-hidden" style={{ transform: 'translateZ(20px)' }}>
                {[...Array(8)].map((_, i) => (
                    <div key={i} className="absolute bottom-0 w-1 h-1 bg-amber-300 rounded-full animate-[rise_4s_infinite_ease-in]" 
                         style={{ 
@@ -266,24 +275,47 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
             </div>
         )}
 
-        {/* --- IMAGE SECTION --- */}
-        <div className="absolute inset-0 bg-slate-800">
-           <img 
+        {/* --- IMAGE SECTION WITH 3D POP-OUT EFFECT --- */}
+        <div 
+            className="absolute inset-0 bg-slate-800"
+            style={{ 
+                // CRITICAL: This separates the image plane from the card background
+                transformStyle: 'preserve-3d' 
+            }}
+        >
+           <motion.img 
              src={imgState.error ? fallbackUrl : character.imageUrl} 
              alt={character.name} 
+             // Apply Parallax and Z-Scale ONLY for winner
+             style={isGold && isActive ? { 
+                 x: imageX, 
+                 y: imageY,
+                 scale: 1.15, // Zoom in slightly
+                 transform: "translateZ(30px)" // Push forward in 3D space
+             } : {}}
              className={`w-full h-full object-cover transition-opacity duration-500 ${imgState.loading ? 'opacity-0' : 'opacity-100'}`}
              draggable={false}
              loading={isActive ? "eager" : "lazy"}
              onLoad={() => setImgState(prev => ({ ...prev, loading: false }))}
              onError={() => setImgState({ loading: false, error: true })}
            />
-           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.4)_100%)] z-[1]" />
-           <div className={`absolute inset-0 bg-gradient-to-b from-black/10 via-transparent ${isGold && isVotingEnded ? 'to-amber-950/40' : 'to-slate-950/95'} z-10`} />
+           
+           {/* Winner Specific: Bottom Mask to blend image into glass panel, simulating "statue" or "bust" look */}
+           {isGold && isActive && (
+               <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-slate-900 via-slate-900/50 to-transparent z-[2]" style={{ transform: 'translateZ(31px)' }} />
+           )}
+
+           {/* Standard Vignette */}
+           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.4)_100%)] z-[1]" style={{ transform: 'translateZ(1px)' }}/>
+           
            {!isActive && <div className="absolute inset-0 bg-slate-950/60 z-20 backdrop-grayscale-[0.5]" />}
         </div>
 
         {/* --- TEXT CONTENT --- */}
-        <div className="absolute inset-0 p-4 sm:p-5 flex flex-col justify-end text-center z-20 pointer-events-none" style={{ transform: 'translateZ(30px)' }}>
+        <div 
+            className="absolute inset-0 p-4 sm:p-5 flex flex-col justify-end text-center z-20 pointer-events-none" 
+            style={{ transform: 'translateZ(50px)' }} // Text floats even higher than image
+        >
            <motion.div animate={{ opacity: isActive ? 1 : 0.5 }} transition={{ duration: 0.2 }}>
              
              {/* WINNER TEXT LAYOUT - GLASS PANEL FOR LEGIBILITY */}
