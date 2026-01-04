@@ -1,72 +1,72 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, ShieldCheck, Lock, AlertTriangle } from 'lucide-react';
+import { MapPin, ShieldCheck, Lock, AlertTriangle, X } from 'lucide-react';
+
+// Fix TS errors with framer-motion props
+const MotionDiv = motion.div as any;
 
 interface PermissionModalProps {
   onRetry: () => void;
-  onSkip?: () => void; // Kept for prop compatibility, but unused in UI
+  onSkip?: () => void; 
   onClose: () => void;
   missingPermissions: ('location' | 'camera')[];
 }
 
 const PermissionModal: React.FC<PermissionModalProps> = ({ onRetry, onClose }) => {
-  
-  // Kita abaikan pengecekan kamera di UI ini, 
-  // karena modal hanya muncul jika Lokasi (Wajib) hilang.
-  
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 font-sans">
       {/* Dimmed Background */}
-      <motion.div 
+      <MotionDiv 
           initial={{ opacity: 0 }} 
           animate={{ opacity: 1 }} 
           exit={{ opacity: 0 }}
-          className="absolute inset-0 bg-slate-950/90 backdrop-blur-md"
-          // Mencegah penutupan modal karena Lokasi sifatnya Wajib
+          className="absolute inset-0 bg-slate-950/90 backdrop-blur-sm"
+          onClick={onClose}
       />
       
       {/* Modal Box */}
-      <motion.div 
+      <MotionDiv 
           initial={{ scale: 0.9, opacity: 0, y: 20 }} 
           animate={{ scale: 1, opacity: 1, y: 0 }} 
           exit={{ scale: 0.9, opacity: 0, y: 20 }}
-          className="bg-slate-900 border border-indigo-500/30 rounded-2xl w-full max-w-sm p-8 relative z-50 shadow-2xl text-center"
+          className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-sm p-6 relative z-50 shadow-2xl text-center"
       >
-        <div className="w-20 h-20 rounded-full bg-indigo-500/10 flex items-center justify-center mb-6 mx-auto ring-1 ring-indigo-500/40 animate-pulse">
-          <ShieldCheck className="text-indigo-400" size={40} />
+        <button onClick={onClose} className="absolute top-4 right-4 text-slate-500 hover:text-white p-2">
+            <X size={20} />
+        </button>
+
+        <div className="w-16 h-16 rounded-full bg-indigo-500/10 flex items-center justify-center mb-5 mx-auto ring-1 ring-indigo-500/30">
+          <MapPin className="text-indigo-400" size={32} />
         </div>
         
-        <h3 className="text-xl font-display font-bold text-white mb-3">Akses Lokasi Diperlukan</h3>
+        <h3 className="text-xl font-bold text-white mb-2">Izin Lokasi</h3>
         
-        <p className="text-sm text-slate-400 leading-relaxed mb-6">
-          Untuk menjaga validitas voting dan mencegah kecurangan, kami mewajibkan akses Lokasi (Geo-Tagging) untuk melanjutkan.
+        <p className="text-sm text-slate-400 leading-relaxed mb-6 px-2">
+          Agar voting tetap adil dan mencegah bot, kami memerlukan akses ke lokasi perangkat Anda saat ini.
         </p>
 
-        <div className="bg-slate-950/50 rounded-xl p-4 mb-8 border border-slate-800">
-            {/* LOCATION STATUS ONLY */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3 text-slate-300 text-sm font-medium">
-                    <MapPin size={16} className='text-red-400' />
-                    <span>Geo-Tagging</span>
-                </div>
-                <span className="text-[10px] bg-red-500/10 text-red-400 px-2 py-0.5 rounded border border-red-500/20 flex items-center gap-1">
-                    <AlertTriangle size={10} /> Wajib
-                </span>
-            </div>
-        </div>
+        <div className="space-y-3">
+            <button 
+                onClick={onRetry} 
+                className="w-full py-3.5 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-900/20 active:scale-95 flex items-center justify-center gap-2"
+            >
+                <Lock size={16} /> 
+                Izinkan Akses
+            </button>
 
-        {/* PRIMARY ACTION: Enable (Triggers both Location & Camera request internally) */}
-        <button onClick={onRetry} className="w-full py-3.5 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-900/20 flex items-center justify-center gap-2 group relative overflow-hidden mb-3">
-          <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-          <Lock size={16} /> 
-          Aktifkan Lokasi
-        </button>
+            <button 
+                onClick={onClose} 
+                className="w-full py-3.5 rounded-xl bg-transparent text-slate-500 font-semibold hover:bg-slate-800 transition-colors border border-transparent hover:border-slate-700"
+            >
+                Batal
+            </button>
+        </div>
         
         <p className="mt-4 text-[10px] text-slate-600">
-           Browser mungkin akan meminta izin tambahan (seperti Kamera) untuk verifikasi latar belakang.
+           Data lokasi hanya digunakan untuk verifikasi voting.
         </p>
 
-      </motion.div>
+      </MotionDiv>
     </div>
   );
 };

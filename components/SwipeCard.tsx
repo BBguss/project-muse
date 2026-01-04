@@ -1,7 +1,11 @@
 import React, { forwardRef, useState, useRef } from 'react';
-import { motion, PanInfo, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
 import { Character } from '../types';
 import { Crown, Medal, Sword, Shield, Star, Ghost, Flame, Zap } from 'lucide-react';
+
+// Fix TS errors with framer-motion props
+const MotionDiv = motion.div as any;
+const MotionImg = motion.img as any;
 
 interface SwipeCardProps {
   character: Character;
@@ -95,7 +99,7 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
   else if (offset < -1) currentState = 'farLeft';
   else if (offset > 1) currentState = 'farRight';
 
-  const handleDragEnd = (_: any, info: PanInfo) => {
+  const handleDragEnd = (_: any, info: any) => {
     if (!isActive || isVotingEnded) return; 
     const swipeThreshold = 50; 
     const { offset: { x }, velocity: { x: velocityX } } = info;
@@ -161,7 +165,7 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
   };
 
   return (
-    <motion.div
+    <MotionDiv
       ref={ref}
       initial={false}
       animate={currentState}
@@ -203,14 +207,14 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
                 {isGold ? (
                     <div className="relative -mt-12 flex flex-col items-center">
                         <div className="absolute top-6 left-1/2 -translate-x-1/2 w-28 h-28 bg-amber-400/50 blur-[40px] rounded-full z-0 animate-pulse" />
-                        <motion.div 
+                        <MotionDiv 
                             animate={{ y: [-8, 0, -8], scale: [1, 1.05, 1], rotate: [0, 2, -2, 0] }}
                             transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
                             className="relative z-50 drop-shadow-[0_10px_10px_rgba(0,0,0,0.6)]"
                         >
                             <Crown size={90} className="text-amber-900 absolute top-[3px] left-0 z-0 opacity-80" strokeWidth={4} />
                             <Crown size={90} className="text-yellow-300 fill-amber-400 z-10 relative drop-shadow-[0_0_20px_rgba(251,191,36,0.8)]" strokeWidth={2} />
-                        </motion.div>
+                        </MotionDiv>
                         <div className="bg-gradient-to-b from-amber-300 via-yellow-500 to-amber-700 px-10 py-2 pb-3 rounded-b-3xl shadow-[0_10px_20px_rgba(0,0,0,0.6)] border-x-[3px] border-b-[3px] border-yellow-200 -mt-6 pt-8 z-40 relative">
                             <span className="text-[14px] font-black text-amber-950 uppercase tracking-[0.25em] drop-shadow-sm">CHAMPION</span>
                         </div>
@@ -283,7 +287,7 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
                 transformStyle: 'preserve-3d' 
             }}
         >
-           <motion.img 
+           <MotionImg 
              src={imgState.error ? fallbackUrl : character.imageUrl} 
              alt={character.name} 
              // Apply Parallax and Z-Scale ONLY for winner
@@ -316,7 +320,7 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
             className="absolute inset-0 p-4 sm:p-5 flex flex-col justify-end text-center z-20 pointer-events-none" 
             style={{ transform: 'translateZ(50px)' }} // Text floats even higher than image
         >
-           <motion.div animate={{ opacity: isActive ? 1 : 0.5 }} transition={{ duration: 0.2 }}>
+           <MotionDiv animate={{ opacity: isActive ? 1 : 0.5 }} transition={{ duration: 0.2 }}>
              
              {/* WINNER TEXT LAYOUT - GLASS PANEL FOR LEGIBILITY */}
              {isGold && isVotingEnded ? (
@@ -377,7 +381,7 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
                  )}
                </>
              )}
-           </motion.div>
+           </MotionDiv>
         </div>
 
       </div>
@@ -393,7 +397,7 @@ const SwipeCard = forwardRef<HTMLDivElement, SwipeCardProps>(({
             100% { transform: translateY(-150px) scale(0); opacity: 0; }
         }
       `}</style>
-    </motion.div>
+    </MotionDiv>
   );
 });
 

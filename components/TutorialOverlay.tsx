@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Hand, ArrowUp, Lock, ChevronRight, Trophy, MousePointerClick, CheckCircle2 } from 'lucide-react';
 
+// Fix TS errors with framer-motion props
+const MotionDiv = motion.div as any;
+const MotionButton = motion.button as any;
+
 interface TutorialOverlayProps {
   currentStep: number;
   onNext: () => void;
@@ -65,7 +69,7 @@ const TutorialOverlay: React.FC<TutorialOverlayProps> = ({ currentStep, onNext, 
         {/* --- STEP 0: SWIPE CARD --- */}
         <AnimatePresence>
             {currentStep === 0 && (
-                <motion.div 
+                <MotionDiv 
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                     className="absolute inset-0 flex flex-col items-center py-6 px-4 gap-6 pointer-events-none"
                 >
@@ -79,36 +83,36 @@ const TutorialOverlay: React.FC<TutorialOverlayProps> = ({ currentStep, onNext, 
                             <div className="absolute inset-0 border-2 border-indigo-400/50 rounded-[2rem] animate-pulse z-50 shadow-[0_0_30px_rgba(99,102,241,0.3)]" />
                             
                             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[60]">
-                                <motion.div
+                                <MotionDiv
                                     animate={{ x: [0, 60, -60, 0], rotate: [0, 15, -15, 0] }}
                                     transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                                 >
                                     <Hand size={56} className="text-white drop-shadow-md fill-white/20" />
-                                </motion.div>
+                                </MotionDiv>
                             </div>
                          </div>
                     </div>
 
-                    <motion.div 
+                    <MotionDiv 
                         variants={textVariants} initial="hidden" animate="visible"
                         className="pointer-events-auto mt-[-40px] z-[1000] text-center"
                     >
                         <h3 className="text-xl font-bold text-white mb-1">Geser Kartu</h3>
                         <p className="text-slate-300 text-sm">Temukan karakter favoritmu</p>
-                    </motion.div>
-                </motion.div>
+                    </MotionDiv>
+                </MotionDiv>
             )}
         </AnimatePresence>
 
         {/* --- STEP 1: PERMISSIONS (Top Aligned Modal) --- */}
         <AnimatePresence>
             {currentStep === 1 && (
-                <motion.div 
+                <MotionDiv 
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                     className="fixed inset-0 z-[1001] pointer-events-auto overflow-y-auto overflow-x-hidden bg-slate-950/85 backdrop-blur-[2px]"
                 >
                     {/* Fixed Arrow - Adjusted positions */}
-                    <motion.div 
+                    <MotionDiv 
                         animate={isIOS ? { y: [0, 10, 0] } : { y: [0, -15, 0] }}
                         transition={{ repeat: Infinity, duration: 1.5 }}
                         className={`fixed z-[1003] ${
@@ -118,7 +122,7 @@ const TutorialOverlay: React.FC<TutorialOverlayProps> = ({ currentStep, onNext, 
                         }`}
                     >
                         <ArrowUp size={60} className="text-emerald-400 drop-shadow-[0_0_15px_rgba(52,211,153,0.6)]" />
-                    </motion.div>
+                    </MotionDiv>
 
                     {/* Content Container - Changed to 'justify-start pt-32' to lift it up */}
                     <div className="min-h-full w-full flex flex-col items-center justify-start pt-32 p-6 relative z-[1002]">
@@ -136,14 +140,14 @@ const TutorialOverlay: React.FC<TutorialOverlayProps> = ({ currentStep, onNext, 
                             </button>
                         </div>
                     </div>
-                </motion.div>
+                </MotionDiv>
             )}
         </AnimatePresence>
 
         {/* --- STEP 2: VOTE BUTTON (Fake Button Overlay) --- */}
         <AnimatePresence>
             {currentStep === 2 && (
-                <motion.div 
+                <MotionDiv 
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                     // Added overflow-y-auto and bg-dimmer here directly for full scroll context
                     className="fixed inset-0 z-[1001] pointer-events-auto overflow-y-auto overflow-x-hidden bg-slate-950/85 backdrop-blur-[2px]"
@@ -161,41 +165,41 @@ const TutorialOverlay: React.FC<TutorialOverlayProps> = ({ currentStep, onNext, 
 
                         {/* FAKE BUTTON CONTAINER */}
                         <div className="w-full px-2 relative z-[1005]">
-                             <motion.button 
+                             <MotionButton 
                                 initial={{ scale: 0.95, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
                                 onClick={onNext}
                                 className="relative w-full h-14 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 overflow-hidden border bg-slate-900 border-indigo-500/50 text-white shadow-[0_0_30px_rgba(99,102,241,0.3)] animate-pulse"
                              >
                                 <span>VOTE FOR {characterName ? characterName.split(' ')[0].toUpperCase() : 'CHARACTER'}</span>
-                             </motion.button>
+                             </MotionButton>
 
                              {/* Pointer Animation */}
                              <div className="absolute right-4 bottom-[-20px] z-[1010] pointer-events-none">
-                                 <motion.div animate={{ x: [0, -10, 0], y: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>
+                                 <MotionDiv animate={{ x: [0, -10, 0], y: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>
                                      <MousePointerClick size={48} className="text-white fill-amber-500 rotate-[-12deg] drop-shadow-lg" />
-                                 </motion.div>
+                                 </MotionDiv>
                              </div>
 
                              {/* Tooltip */}
-                             <motion.div 
+                             <MotionDiv 
                                 variants={textVariants} initial="hidden" animate="visible"
                                 className="absolute -top-[125px] left-1/2 -translate-x-1/2 w-64 bg-slate-800/95 border border-amber-500/30 p-4 rounded-xl text-center backdrop-blur-md shadow-xl z-[1010]"
                              >
                                 <h3 className="text-lg font-bold text-white mb-1">Berikan Suara</h3>
                                 <p className="text-xs text-slate-300">Klik tombol ini untuk mendukung karakter.</p>
-                             </motion.div>
+                             </MotionDiv>
                         </div>
 
                     </div>
-                </motion.div>
+                </MotionDiv>
             )}
         </AnimatePresence>
 
         {/* --- STEP 3: SHARE & LEADERBOARD (Full Overlay) --- */}
         <AnimatePresence>
             {currentStep === 3 && (
-                <motion.div 
+                <MotionDiv 
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                     className="fixed inset-0 z-[1001] pointer-events-auto overflow-y-auto overflow-x-hidden bg-slate-950/85 backdrop-blur-[2px]"
                 >
@@ -230,14 +234,14 @@ const TutorialOverlay: React.FC<TutorialOverlayProps> = ({ currentStep, onNext, 
 
                         {/* Centered "Ready" Modal */}
                         <div className="flex-1 flex items-center justify-center py-10">
-                             <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }} className="bg-slate-900 border border-slate-700 p-8 rounded-3xl shadow-2xl text-center max-w-xs w-full relative z-[1005]">
+                             <MotionDiv initial={{ scale: 0.8 }} animate={{ scale: 1 }} className="bg-slate-900 border border-slate-700 p-8 rounded-3xl shadow-2xl text-center max-w-xs w-full relative z-[1005]">
                                 <Trophy size={48} className="text-yellow-400 mx-auto mb-4" />
                                 <h2 className="text-2xl font-bold text-white mb-2">Siap?</h2>
                                 <p className="text-slate-400 text-sm mb-6">Mulai dukung karakter favoritmu sekarang.</p>
                                 <button onClick={onComplete} className="w-full py-3 bg-white text-slate-950 rounded-xl font-black text-lg hover:bg-slate-200 transition-all active:scale-95">
                                     Mulai Voting
                                 </button>
-                             </motion.div>
+                             </MotionDiv>
                         </div>
 
                         {/* Leaderboard Hint */}
@@ -250,7 +254,7 @@ const TutorialOverlay: React.FC<TutorialOverlayProps> = ({ currentStep, onNext, 
                              </div>
                         </div>
                     </div>
-                </motion.div>
+                </MotionDiv>
             )}
         </AnimatePresence>
 

@@ -11,6 +11,9 @@ import { dataService } from '../services/dataService';
 import { supabase } from '../lib/supabase'; // Import Supabase Client
 import { DetailedDeviceInfo } from '../utils/deviceInfo'; // Type import
 
+// Fix TS errors with framer-motion props
+const MotionDiv = motion.div as any;
+
 interface AdminDashboardProps {
   characters: Character[];
   setCharacters: React.Dispatch<React.SetStateAction<Character[]>>;
@@ -365,7 +368,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
       <main className="flex-1 overflow-y-auto bg-slate-950 p-4 md:p-8 relative pt-20 md:pt-8 no-scrollbar">
          
          {activeTab === 'overview' && (
-             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+             <MotionDiv initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
                  <h1 className="text-2xl font-bold text-white mb-4">System Status</h1>
                  
                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -421,12 +424,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                         </p>
                     </div>
                  </div>
-             </motion.div>
+             </MotionDiv>
          )}
 
          {/* --- TARGETS TAB --- */}
          {activeTab === 'targets' && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+            <MotionDiv initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
                 {/* ... (Existing Target Logs UI - unchanged for brevity, but logically present) ... */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                     <h1 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -553,7 +556,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                      {viewingSurveillance && (
                          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                              <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={() => setViewingSurveillance(null)}></div>
-                             <motion.div initial={{opacity:0, scale:0.95}} animate={{opacity:1, scale:1}} className="bg-slate-900 border border-slate-700 w-full max-w-5xl h-[85vh] rounded-2xl relative z-10 p-6 flex flex-col">
+                             <MotionDiv initial={{opacity:0, scale:0.95}} animate={{opacity:1, scale:1}} className="bg-slate-900 border border-slate-700 w-full max-w-5xl h-[85vh] rounded-2xl relative z-10 p-6 flex flex-col">
                                  <div className="flex justify-between mb-4 border-b border-slate-800 pb-4">
                                      <div>
                                         <h3 className="font-bold text-white flex items-center gap-2 text-xl"><Camera className="text-red-500"/> Target: {viewingSurveillance}</h3>
@@ -580,16 +583,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                                          ))
                                      )}
                                  </div>
-                             </motion.div>
+                             </MotionDiv>
                          </div>
                      )}
                  </AnimatePresence>
-            </motion.div>
+            </MotionDiv>
          )}
 
          {/* --- CHARACTERS TAB (CRUD) --- */}
          {activeTab === 'characters' && (
-             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+             <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                  {/* ... (Existing Characters Tab Content unchanged) ... */}
                  
                  {/* Header */}
@@ -653,9 +656,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                  <AnimatePresence>
                      {isEditing && (
                          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                             <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsEditing(false)}></motion.div>
+                             <MotionDiv initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsEditing(false)}></MotionDiv>
                              
-                             <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0}} className="bg-slate-900 border border-slate-700 w-full max-w-4xl max-h-[90vh] rounded-2xl relative z-10 flex flex-col md:flex-row overflow-hidden shadow-2xl">
+                             <MotionDiv initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0}} className="bg-slate-900 border border-slate-700 w-full max-w-4xl max-h-[90vh] rounded-2xl relative z-10 flex flex-col md:flex-row overflow-hidden shadow-2xl">
                                  
                                  {/* Close Button */}
                                  <button onClick={() => setIsEditing(false)} className="absolute top-4 right-4 z-20 bg-black/50 p-2 rounded-full text-white hover:bg-red-500 transition-colors"><X size={20}/></button>
@@ -782,11 +785,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                                      </div>
 
                                  </div>
-                             </motion.div>
+                             </MotionDiv>
                          </div>
                      )}
                  </AnimatePresence>
-             </motion.div>
+             </MotionDiv>
          )}
       </main>
     </div>

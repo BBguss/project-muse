@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       host: true, // Allow access from network (important for NAS)
+      allowedHosts: ['muse.kolab.top'],
       proxy: {
         // Proxy API requests to backend
         '/api': {

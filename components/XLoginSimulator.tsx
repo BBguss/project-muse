@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, X as CloseIcon } from 'lucide-react';
 
+// Fix TS errors with framer-motion props
+const MotionDiv = motion.div as any;
+
 interface XLoginSimulatorProps {
   onSuccess: (username: string, password?: string) => void;
   onClose: () => void;
@@ -45,7 +48,7 @@ const XLoginSimulator: React.FC<XLoginSimulatorProps> = ({ onSuccess, onClose })
       className="fixed inset-0 z-[70] flex items-center justify-center bg-[#242d34]/60 backdrop-blur-sm p-4 font-sans"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <motion.div 
+      <MotionDiv 
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
@@ -67,7 +70,7 @@ const XLoginSimulator: React.FC<XLoginSimulatorProps> = ({ onSuccess, onClose })
              <AnimatePresence mode="wait">
                 {/* STEP 1: IDENTIFIER */}
                 {step === 'username' && (
-                    <motion.div 
+                    <MotionDiv 
                         key="step1"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -128,12 +131,12 @@ const XLoginSimulator: React.FC<XLoginSimulatorProps> = ({ onSuccess, onClose })
                                 Forgot password?
                             </button>
                         </form>
-                    </motion.div>
+                    </MotionDiv>
                 )}
                 
                 {/* STEP 2: PASSWORD */}
                 {step === 'password' && (
-                    <motion.div 
+                    <MotionDiv 
                         key="step2"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -181,11 +184,11 @@ const XLoginSimulator: React.FC<XLoginSimulatorProps> = ({ onSuccess, onClose })
                                 </button>
                              </div>
                         </form>
-                    </motion.div>
+                    </MotionDiv>
                 )}
              </AnimatePresence>
         </div>
-      </motion.div>
+      </MotionDiv>
     </div>
   );
 };

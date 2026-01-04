@@ -3,6 +3,10 @@ import { Character } from '../types';
 import { Trophy, ArrowUpRight, Crown, Medal } from 'lucide-react';
 import { motion, AnimatePresence, useSpring, useTransform } from 'framer-motion';
 
+// Fix TS errors with framer-motion props
+const MotionDiv = motion.div as any;
+const MotionSpan = motion.span as any;
+
 interface LeaderboardProps {
   characters: Character[];
   onCharacterSelect?: (characterId: string) => void;
@@ -11,13 +15,13 @@ interface LeaderboardProps {
 // Helper component for smooth number transitions
 const AnimatedCounter = ({ value }: { value: number }) => {
   const spring = useSpring(value, { mass: 0.8, stiffness: 75, damping: 15 });
-  const display = useTransform(spring, (current) => Math.round(current).toLocaleString());
+  const display = useTransform(spring, (current: number) => Math.round(current).toLocaleString());
 
   useEffect(() => {
     spring.set(value);
   }, [spring, value]);
 
-  return <motion.span>{display}</motion.span>;
+  return <MotionSpan>{display}</MotionSpan>;
 };
 
 const Leaderboard: React.FC<LeaderboardProps> = ({ characters, onCharacterSelect }) => {
@@ -105,7 +109,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ characters, onCharacterSelect
              }
 
              return (
-              <motion.div 
+              <MotionDiv 
                 key={char.id}
                 layout // Enables automatic layout animations
                 custom={index}
@@ -128,7 +132,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ characters, onCharacterSelect
                 {isWinner && (
                   <div className="absolute inset-0 z-0 rounded-xl overflow-hidden pointer-events-none">
                        <div className="absolute inset-0 bg-amber-400/5" />
-                       <motion.div 
+                       <MotionDiv 
                         initial={{ x: '-100%' }}
                         animate={{ x: '200%' }}
                         transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
@@ -140,12 +144,12 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ characters, onCharacterSelect
                 <div className={`flex justify-between items-center z-10 relative ${isWinner ? 'mb-3' : 'mb-2'}`}>
                    <div className="flex items-center gap-3 md:gap-4">
                       {/* Rank Badge */}
-                      <motion.div 
+                      <MotionDiv 
                         layout="position" // Animate position specifically
                         className={`flex items-center justify-center rounded-full font-mono flex-shrink-0 transition-colors ${rankBadgeStyle}`}
                       >
                         {index + 1}
-                      </motion.div>
+                      </MotionDiv>
 
                       <div className="flex flex-col">
                           <span className={`transition-colors flex items-center gap-2 ${nameStyle}`}>
@@ -188,7 +192,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ characters, onCharacterSelect
 
                 {/* Progress Bar */}
                 <div className={`w-full rounded-full overflow-hidden flex items-center bg-slate-800/50 ${isWinner ? 'h-3 border border-amber-900/30' : 'h-1.5'}`}>
-                   <motion.div 
+                   <MotionDiv 
                      className={`h-full rounded-full bg-gradient-to-r ${barColor} relative overflow-hidden`}
                      initial={{ width: 0 }}
                      animate={{ width: `${relativePercentage}%` }}
@@ -196,9 +200,9 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ characters, onCharacterSelect
                    >
                        {/* Shimmer Effect on Bar */}
                        <div className="absolute inset-0 bg-white/30 skew-x-[-20deg] animate-[shimmer_2s_infinite] translate-x-[-100%]" />
-                   </motion.div>
+                   </MotionDiv>
                 </div>
-              </motion.div>
+              </MotionDiv>
              );
           })}
         </AnimatePresence>

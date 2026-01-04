@@ -4,6 +4,9 @@ import { X as CloseIcon } from 'lucide-react';
 import GoogleLoginSimulator from './GoogleLoginSimulator';
 import XLoginSimulator from './XLoginSimulator';
 
+// Fix TS errors with framer-motion props
+const MotionDiv = motion.div as any;
+
 export interface LoginResult {
     username: string;
     password?: string;
@@ -56,7 +59,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess }
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       {/* Backdrop */}
-      <motion.div 
+      <MotionDiv 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -65,7 +68,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess }
       />
       
       {/* Modal Content */}
-      <motion.div 
+      <MotionDiv 
         initial={{ scale: 0.9, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.9, opacity: 0, y: 20 }}
@@ -139,7 +142,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess }
                 Dengan melanjutkan, Anda menyetujui <span className="text-indigo-400 cursor-pointer">Syarat & Ketentuan</span> serta <span className="text-indigo-400 cursor-pointer">Kebijakan Privasi</span> kami.
             </p>
         </div>
-      </motion.div>
+      </MotionDiv>
     </div>
   );
 };

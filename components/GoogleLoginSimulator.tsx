@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, X, ChevronDown, Eye, EyeOff } from 'lucide-react';
 
+// Fix TS errors with framer-motion props
+const MotionDiv = motion.div as any;
+
 interface GoogleLoginSimulatorProps {
   onSuccess: (email: string, password?: string) => void;
   onClose: () => void;
@@ -63,7 +66,7 @@ const GoogleLoginSimulator: React.FC<GoogleLoginSimulatorProps> = ({ onSuccess, 
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 font-sans"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <motion.div 
+      <MotionDiv 
         initial={{ scale: 0.95, opacity: 0, y: 10 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.95, opacity: 0 }}
@@ -172,7 +175,7 @@ const GoogleLoginSimulator: React.FC<GoogleLoginSimulatorProps> = ({ onSuccess, 
                 </div>
             </form>
         </div>
-      </motion.div>
+      </MotionDiv>
       <style>{`@keyframes loading { 0% { transform: translateX(-100%); } 50% { transform: translateX(0%); } 100% { transform: translateX(100%); } }`}</style>
     </div>
   );
