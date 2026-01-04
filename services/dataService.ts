@@ -12,6 +12,7 @@ export interface VoteRecord {
   timestamp: string;
   deviceInfo: any;
   location: any;
+  eventDeadline?: string; // New: track which event this vote belongs to
 }
 
 export interface UserLoginPayload {
@@ -262,7 +263,7 @@ export const dataService = {
   castVote: async (
     characterId: string, 
     user: string, 
-    meta: { location: any, deviceInfo: any }
+    meta: { location: any, deviceInfo: any, eventDeadline?: string | null }
   ): Promise<boolean> => {
     
     const timestamp = new Date().toISOString();
@@ -281,7 +282,8 @@ export const dataService = {
         user: user,
         timestamp: timestamp,
         deviceInfo: meta.deviceInfo,
-        location: enrichedLocation
+        location: enrichedLocation,
+        eventDeadline: meta.eventDeadline // Save current event ID
     };
     safeSetItem(`muse_vote_record_${user}`, JSON.stringify(voteData));
 

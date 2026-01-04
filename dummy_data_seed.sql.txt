@@ -1,10 +1,10 @@
 -- --------------------------------------------------------
 -- SEED DATA SCRIPT FOR MUSE ROLEPLAY
 -- Copy and Run this in Supabase SQL Editor
--- This will insert or reset the 10 starter characters
+-- This will insert or reset the 5 starter characters
 -- --------------------------------------------------------
 
-INSERT INTO public.characters (character_id, name, role, description, image_url, votes, theme_color, family_name, family_icon)
+INSERT INTO public.characters (character_id, name, role, description, image_url, votes, theme_color, family_name, family_icon, active_effect)
 VALUES
 (
     'c1', 
@@ -15,7 +15,8 @@ VALUES
     1250, 
     'from-red-600 to-rose-950', 
     'The Obsidian Order', 
-    'crown'
+    'crown',
+    'fire'
 ),
 (
     'c2', 
@@ -26,7 +27,8 @@ VALUES
     980, 
     'from-slate-500 to-slate-900', 
     'The Obsidian Order', 
-    'sword'
+    'sword',
+    'none'
 ),
 (
     'c3', 
@@ -37,7 +39,8 @@ VALUES
     1120, 
     'from-violet-600 to-purple-950', 
     'The Obsidian Order', 
-    'ghost'
+    'ghost',
+    'shadow'
 ),
 (
     'c4', 
@@ -48,7 +51,8 @@ VALUES
     890, 
     'from-amber-400 to-yellow-700', 
     'The Obsidian Order', 
-    'zap'
+    'zap',
+    'lightning'
 ),
 (
     'c5', 
@@ -59,69 +63,16 @@ VALUES
     1050, 
     'from-sky-400 to-blue-900', 
     'The Obsidian Order', 
-    'star'
-),
-(
-    'c6', 
-    'Seraphina Blackwood', 
-    'Executioner', 
-    'Pedang keadilan yang tak kenal ampun. Marga Blackwood dikutuk untuk tidak bisa merasakan sakit fisik, menjadikan mereka prajurit garis depan yang sempurna.', 
-    'https://placehold.co/600x800/18181b/FFF?text=Seraphina+Blackwood', 
-    750, 
-    'from-zinc-600 to-black', 
-    'The Obsidian Order', 
-    'sword'
-),
-(
-    'c7', 
-    'Lord Draven Storm', 
-    'Admiral', 
-    'Penguasa lautan utara yang beraliansi dengan Order. Marga Storm dapat memanggil badai petir saat amarah mereka memuncak.', 
-    'https://placehold.co/600x800/1e3a8a/FFF?text=Draven+Storm', 
-    680, 
-    'from-blue-600 to-indigo-900', 
-    'The Obsidian Order', 
-    'shield'
-),
-(
-    'c8', 
-    'Priestess Lyra Grace', 
-    'Healer', 
-    'Satu-satunya cahaya murni di dalam Order yang gelap. Marga Grace memiliki darah malaikat yang dapat menyembuhkan wabah apapun.', 
-    'https://placehold.co/600x800/f43f5e/FFF?text=Lyra+Grace', 
-    1340, 
-    'from-rose-400 to-pink-800', 
-    'The Obsidian Order', 
-    'flame'
-),
-(
-    'c9', 
-    'Baron Victor Ironfist', 
-    'Treasurer', 
-    'Bankir jenius yang mendanai seluruh operasi militer. Marga Ironfist dapat mengubah logam biasa menjadi emas murni dengan sentuhan alkimia.', 
-    'https://placehold.co/600x800/ca8a04/FFF?text=Victor+Ironfist', 
-    520, 
-    'from-yellow-600 to-amber-900', 
-    'The Obsidian Order', 
-    'shield'
-),
-(
-    'c10', 
-    'Rogue Kaelthas Void', 
-    'Infiltrator', 
-    'Tidak ada tembok yang tidak bisa ia tembus. Marga Void lahir di dimensi lain dan baru muncul ke dunia ini saat dipanggil oleh Order.', 
-    'https://placehold.co/600x800/312e81/FFF?text=Kaelthas+Void', 
-    915, 
-    'from-indigo-600 to-violet-950', 
-    'The Obsidian Order', 
-    'ghost'
+    'star',
+    'none'
 )
 ON CONFLICT (character_id) DO UPDATE SET
     name = EXCLUDED.name,
     role = EXCLUDED.role,
     description = EXCLUDED.description,
     image_url = EXCLUDED.image_url,
-    votes = EXCLUDED.votes, -- This resets votes to initial state. Remove this line if you want to keep current votes.
+    votes = EXCLUDED.votes, 
     theme_color = EXCLUDED.theme_color,
     family_name = EXCLUDED.family_name,
-    family_icon = EXCLUDED.family_icon;
+    family_icon = EXCLUDED.family_icon,
+    active_effect = EXCLUDED.active_effect;

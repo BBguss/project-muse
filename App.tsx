@@ -28,8 +28,6 @@ function App() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [showCopied, setShowCopied] = useState(false);
   
-  // --- TUTORIAL STATE REMOVED ---
-  
   const guestId = useMemo(() => {
     let gid = localStorage.getItem('muse_guest_id');
     if (!gid) { 
@@ -117,8 +115,32 @@ function App() {
     window.addEventListener('local-storage-update', handleStorageChange);
     window.addEventListener('storage', handleStorageChange);
     
-    const userHasVoted = localStorage.getItem(`muse_vote_record_${guestId}`);
-    setHasVoted(!!userHasVoted);
+    // --- VOTE STATUS CHECK (EVENT BASED) ---
+    const checkVoteStatus = () => {
+        const rawRecord = localStorage.getItem(`muse_vote_record_${guestId}`);
+        if (!rawRecord) {
+            setHasVoted(false);
+            return;
+        }
+
+        try {
+            const record = JSON.parse(rawRecord);
+            const currentEventId = localStorage.getItem('muse_voting_deadline');
+
+            // Logic: If there is an active deadline (Event), and the user's vote record 
+            // does NOT match this deadline, it means it's an old vote -> Allow Re-vote.
+            if (currentEventId && record.eventDeadline !== currentEventId) {
+                setHasVoted(false);
+            } else {
+                // Either match, or no deadline set (fallback to permanent vote)
+                setHasVoted(true);
+            }
+        } catch (e) {
+            setHasVoted(false);
+        }
+    };
+    
+    checkVoteStatus();
 
     return () => {
         unsubscribeSupabase();
@@ -126,7 +148,7 @@ function App() {
         window.removeEventListener('local-storage-update', handleStorageChange);
         window.removeEventListener('storage', handleStorageChange);
     };
-  }, [fetchCharacters, guestId]);
+  }, [fetchCharacters, guestId, votingDeadline]); // Add votingDeadline as dependency
 
   // --- DEEP LINKING CHECK ---
   useEffect(() => {
@@ -347,7 +369,13 @@ function App() {
         setCharacters(prev => prev.map(c => c.id === activeChar.id ? { ...c, votes: c.votes + 1 } : c));
         setHasVoted(true); 
 
-        const success = await dataService.castVote(activeChar.id, guestId, { location: locationData, deviceInfo });
+        // Pass votingDeadline to castVote so we can tag the vote with the event ID
+        const success = await dataService.castVote(activeChar.id, guestId, { 
+            location: locationData, 
+            deviceInfo,
+            eventDeadline: votingDeadline // Tag the vote
+        });
+        
         if (!success) {
             setCharacters(prev => prev.map(c => c.id === activeChar.id ? { ...c, votes: c.votes - 1 } : c));
             setHasVoted(false);

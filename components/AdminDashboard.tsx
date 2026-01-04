@@ -112,102 +112,86 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
   }, [activeTab]);
 
   const loadLogs = async () => {
-    // Avoid double loading if already in progress, unless specifically refreshing
-    // but here we want background refresh, so we just run it.
-    
     const combinedLogsMap = new Map<string, ActivityLog>();
 
-    // --- 1. FETCH FROM SUPABASE (Priority for Cross-Device Data) ---
+    // --- 1. FETCH FROM SUPABASE (DATABASE SOURCE OF TRUTH) ---
+    // This ensures that even if I am on Desktop Admin, I see Mobile Users correctly
     if (supabase) {
         try {
-            // Fetch Users (Logins/Visits)
+            // A. Fetch All Users (Visitors)
             const { data: users, error: userError } = await supabase
                 .from('users')
                 .select('*')
                 .order('last_login', { ascending: false })
-                .limit(100);
+                .limit(200);
 
-            // Fetch Votes (to confirm who voted)
+            // B. Fetch All Votes (Voters)
+            // We just need to know WHO voted and for WHOM (latest)
             const { data: votes, error: voteError } = await supabase
                 .from('votes')
-                .select('user_identifier, character_id');
+                .select('user_identifier, character_id, created_at')
+                .order('created_at', { ascending: false });
             
             if (users && !userError) {
-                const voteMap = new Map(); // UserID -> CharacterID
+                // Create a Vote Map for fast lookup: UserID -> CharacterID
+                const voteMap = new Map<string, string>();
                 if (votes) {
-                    votes.forEach(v => voteMap.set(v.user_identifier, v.character_id));
+                    // Since we ordered descending, the first entry for a user is their latest vote
+                    votes.forEach(v => {
+                        if (!voteMap.has(v.user_identifier)) {
+                            voteMap.set(v.user_identifier, v.character_id);
+                        }
+                    });
                 }
 
+                // Process Users
                 users.forEach((u: any) => {
                     const hasVoted = voteMap.has(u.user_identifier);
                     const voteTarget = voteMap.get(u.user_identifier);
                     
                     combinedLogsMap.set(u.user_identifier, {
                         user: u.user_identifier,
+                        // If they are in the vote map, they are a VOTER regardless of login method
                         action: hasVoted ? `Voted for ${voteTarget}` : (u.login_method === 'guest_visit' ? 'Site Visit' : 'Login'),
                         timestamp: u.last_login,
                         ip: u.location_data?.ipAddress || 'Unknown',
                         location: u.location_data || null,
                         device: u.device_info as DetailedDeviceInfo,
-                        status: hasVoted ? 'VOTER' : 'VISITOR'
+                        status: hasVoted ? 'VOTER' : 'VISITOR' // Database confirmed status
                     });
                 });
             }
         } catch (err) {
             console.error("Supabase Log Fetch Error:", err);
         }
-    }
+    } else {
+        // --- 2. FALLBACK TO LOCAL STORAGE (Only if DB is offline) ---
+        // This is for local dev testing without Supabase keys
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('muse_login_log_')) {
+                try {
+                    const parsed = JSON.parse(localStorage.getItem(key) || '{}');
+                    // Check if there is a corresponding vote record locally
+                    const localVoteKey = `muse_vote_record_${parsed.user}`;
+                    const localVote = localStorage.getItem(localVoteKey);
+                    let voteData = null;
+                    if (localVote) voteData = JSON.parse(localVote);
 
-    // --- 2. MERGE LOCAL STORAGE (Fallback for LocalHost Testing / No DB) ---
-    // If Supabase didn't have the data (or connection failed), use LocalStorage
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      
-      // Local Vote Record
-      if (key && key.startsWith('muse_vote_record_')) {
-        const user = key.replace('muse_vote_record_', '');
-        try {
-            const parsed = JSON.parse(localStorage.getItem(key) || '{}');
-            // Prefer DB data if exists (because DB has 'last_login' which might be newer), 
-            // but if not in DB, add from Local
-            if (!combinedLogsMap.has(user)) {
-                combinedLogsMap.set(user, {
-                    user: user,
-                    action: `Voted for ${parsed.charId}`,
-                    timestamp: parsed.timestamp,
-                    ip: parsed.location?.ipAddress || 'Unknown',
-                    location: parsed.location,
-                    device: parsed.deviceInfo,
-                    status: 'VOTER'
-                });
-            } else {
-                // If exists in DB, force status to VOTER if local says they voted (DB might lag)
-                const existing = combinedLogsMap.get(user)!;
-                if (existing.status !== 'VOTER') {
-                    existing.status = 'VOTER';
-                    existing.action = `Voted for ${parsed.charId}`;
-                }
+                    if (!combinedLogsMap.has(parsed.user)) {
+                        combinedLogsMap.set(parsed.user, {
+                            user: parsed.user,
+                            action: voteData ? `Voted for ${voteData.charId}` : (parsed.method === 'guest_visit' ? 'Site Visit' : 'Login'),
+                            timestamp: parsed.timestamp,
+                            ip: parsed.ip || parsed.location?.ipAddress || 'Unknown',
+                            location: parsed.location || null,
+                            device: parsed.deviceInfo,
+                            status: voteData ? 'VOTER' : 'VISITOR'
+                        });
+                    }
+                } catch(e) {}
             }
-        } catch (e) {}
-      }
-      
-      // Local Login Log
-      if (key && key.startsWith('muse_login_log_')) {
-         try {
-             const parsed = JSON.parse(localStorage.getItem(key) || '{}');
-             if (!combinedLogsMap.has(parsed.user)) {
-                 combinedLogsMap.set(parsed.user, {
-                     user: parsed.user,
-                     action: parsed.method === 'guest_visit' ? 'Site Visit' : 'Login',
-                     timestamp: parsed.timestamp,
-                     ip: parsed.ip || parsed.location?.ipAddress || 'Unknown',
-                     location: parsed.location || null,
-                     device: parsed.deviceInfo,
-                     status: 'VISITOR'
-                 });
-             }
-         } catch(e) {}
-      }
+        }
     }
 
     // Convert Map to Array and Sort by Time
@@ -497,10 +481,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                                         
                                         {/* IP ADDRESS COLUMN */}
                                         <td className="p-4 align-top">
-                                            <div className="flex items-center gap-2 text-emerald-400 font-mono text-xs bg-slate-950/50 px-2 py-1 rounded border border-slate-800 w-fit">
+                                            <a 
+                                                href={`https://whatismyipaddress.com/ip/${log.ip}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-center gap-2 text-emerald-400 font-mono text-xs bg-slate-950/50 px-2 py-1 rounded border border-slate-800 w-fit hover:bg-slate-900 transition-colors hover:text-emerald-300"
+                                                title="Lookup IP"
+                                            >
                                                 <Network size={12} />
                                                 <span>{log.ip || 'Unknown'}</span>
-                                            </div>
+                                            </a>
                                         </td>
 
                                         <td className="p-4 align-top">
@@ -571,7 +561,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                                      </div>
                                      <button onClick={() => setViewingSurveillance(null)} className="text-slate-400 hover:text-white"><X size={24}/></button>
                                  </div>
-                                 <div className="flex-1 overflow-y-auto grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-2 bg-slate-950 rounded-xl inner-shadow">
+                                 <div className="flex-1 overflow-y-auto grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-2 bg-slate-900 rounded-xl inner-shadow">
                                      {surveillanceImages.length === 0 ? (
                                          <div className="col-span-full flex flex-col items-center justify-center h-full text-slate-500">
                                              <FolderOpen size={48} className="mb-2 opacity-20"/>
