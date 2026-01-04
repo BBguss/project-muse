@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, LogOut, Edit3, Trash2, Save, RefreshCcw, Trophy, Activity,
   Search, Zap, Menu, X, Upload, Link as LinkIcon, Monitor, Smartphone, MapPin, 
   Calendar, Clock, Camera, FolderOpen, Download, FileJson, Globe, RefreshCw, Cpu, Timer, Ban,
-  Eye, CheckCircle2, Crown, Sword, Shield, Star, Ghost, Flame, Plus, Sparkles, Network, AlertOctagon
+  Eye, CheckCircle2, Crown, Sword, Shield, Star, Ghost, Flame, Plus, Sparkles, Network, AlertOctagon, Edit2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { dataService } from '../services/dataService';
@@ -219,6 +219,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
       if (confirmText === 'DELETE') {
           await dataService.clearAllAccessLogs();
           setLogs([]);
+      }
+  };
+
+  const handleSetAlias = async (user: string, currentAlias?: string) => {
+      const newAlias = prompt(`Set alias for ${user}:`, currentAlias || '');
+      if (newAlias !== null) { // Allow empty string to clear alias
+          await dataService.setGuestAlias(user, newAlias);
+          loadLogs(); // Refresh UI
       }
   };
 
@@ -450,7 +458,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                     <table className="w-full text-left text-sm min-w-[1200px]">
                         <thead className="bg-slate-800/50 text-slate-400 font-medium">
                             <tr>
-                                <th className="p-4 w-[200px]">Identity & Status</th>
+                                <th className="p-4 w-[250px]">Identity & Status</th>
                                 <th className="p-4 w-[150px]">Network (IP)</th>
                                 <th className="p-4 w-[250px]">Location Info</th>
                                 <th className="p-4 w-[250px]">Device Fingerprint</th>
@@ -477,7 +485,33 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                                                     </span>
                                                 )}
                                             </div>
-                                            <div className="font-mono font-bold text-indigo-300 mb-1">{log.user}</div>
+                                            
+                                            {/* Identity Section with Alias Support */}
+                                            <div className="flex items-center gap-2 mb-1 group">
+                                                <div className="flex flex-col">
+                                                    {log.device.alias ? (
+                                                        <>
+                                                            <span className="font-display font-bold text-indigo-300 text-lg flex items-center gap-2">
+                                                                {log.device.alias}
+                                                                <span className="text-[10px] px-1.5 py-0.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded uppercase tracking-wider">Alias</span>
+                                                            </span>
+                                                            <span className="font-mono text-xs text-slate-600 line-through decoration-slate-700">{log.user}</span>
+                                                        </>
+                                                    ) : (
+                                                        <span className="font-mono font-bold text-indigo-300">{log.user}</span>
+                                                    )}
+                                                </div>
+                                                
+                                                {/* Edit Alias Button */}
+                                                <button 
+                                                    onClick={() => handleSetAlias(log.user, log.device.alias)}
+                                                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-white transition-all bg-slate-800/50 rounded"
+                                                    title="Set Alias"
+                                                >
+                                                    <Edit2 size={12} />
+                                                </button>
+                                            </div>
+
                                             <div className="text-xs text-white/70 mb-2 italic">"{log.action}"</div>
                                             <div className="text-[10px] text-slate-500">{new Date(log.timestamp).toLocaleTimeString()}</div>
                                         </td>

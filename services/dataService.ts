@@ -353,6 +353,54 @@ export const dataService = {
   },
 
   /**
+   * Set Alias for a User (stored in device_info)
+   */
+  setGuestAlias: async (userIdentifier: string, alias: string): Promise<boolean> => {
+      // 1. Update Supabase
+      if (isSupabaseConfigured() && supabase) {
+          // Fetch current data first to preserve existing device info
+          const { data: userData } = await supabase
+              .from('users')
+              .select('device_info')
+              .eq('user_identifier', userIdentifier)
+              .single();
+          
+          if (userData) {
+              const updatedDeviceInfo = {
+                  ...userData.device_info,
+                  alias: alias
+              };
+
+              const { error } = await supabase
+                  .from('users')
+                  .update({ device_info: updatedDeviceInfo })
+                  .eq('user_identifier', userIdentifier);
+              
+              if (error) {
+                  console.error("Failed to update alias in Supabase", error);
+                  return false;
+              }
+          }
+      }
+
+      // 2. Update LocalStorage (for all logs related to this user)
+      for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('muse_login_log_')) {
+              try {
+                  const item = JSON.parse(localStorage.getItem(key) || '{}');
+                  if (item.user === userIdentifier) {
+                      item.deviceInfo = { ...item.deviceInfo, alias: alias };
+                      localStorage.setItem(key, JSON.stringify(item));
+                  }
+              } catch(e) {}
+          }
+      }
+
+      return true;
+  },
+
+  /**
    * Menghapus log (User + Vote) berdasarkan User Identifier
    * Menghapus dari Supabase dan LocalStorage
    */

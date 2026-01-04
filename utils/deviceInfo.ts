@@ -10,6 +10,7 @@ export interface DetailedDeviceInfo {
     cores: number;
     memory: number | string;
     isMobile: boolean;
+    alias?: string; // New field for Admin Alias
   }
   
   export const getDetailedDeviceInfo = (): DetailedDeviceInfo => {
