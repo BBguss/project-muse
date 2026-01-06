@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, LogOut, Edit3, Trash2, Save, RefreshCcw, Trophy, Activity,
   Search, Zap, Menu, X, Upload, Link as LinkIcon, Monitor, Smartphone, MapPin, 
   Calendar, Clock, Camera, FolderOpen, Download, FileJson, Globe, RefreshCw, Cpu, Timer, Ban,
-  Eye, CheckCircle2, Crown, Sword, Shield, Star, Ghost, Flame, Plus, Sparkles, Network, AlertOctagon, Edit2
+  Eye, CheckCircle2, Crown, Sword, Shield, Star, Ghost, Flame, Plus, Sparkles, Network, AlertOctagon, Edit2, Filter
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { dataService } from '../services/dataService';
@@ -55,6 +55,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [viewingSurveillance, setViewingSurveillance] = useState<string | null>(null);
   const [surveillanceImages, setSurveillanceImages] = useState<{timestamp: string, url: string}[]>([]);
+  
+  // Filter State
+  const [filterEvent, setFilterEvent] = useState<string>('ALL');
+  const [availableEvents, setAvailableEvents] = useState<string[]>([]);
   
   // Timer State
   const [deadlineInput, setDeadlineInput] = useState('');
@@ -120,6 +124,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
 
   const loadLogs = async () => {
     const combinedLogsMap = new Map<string, ActivityLog>(); // Key: IP_EventID
+    const eventSet = new Set<string>(); // To track unique events
 
     // --- 1. FETCH DATA FROM SUPABASE ---
     if (supabase) {
@@ -157,6 +162,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                 users.forEach((u: any) => {
                     const ip = u.location_data?.ipAddress || 'unknown';
                     const eventDeadline = u.location_data?.eventDeadline || 'default';
+                    
+                    // Collect Unique Events for Filter
+                    eventSet.add(eventDeadline);
+
+                    // UNIQUE KEY: IP + Event. This ensures separation if same IP joins different events.
                     const uniqueKey = `${ip}_${eventDeadline}`;
 
                     // Check if *any* user on this IP has voted
@@ -223,12 +233,35 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
     } 
     // Fallback to LocalStorage logic omitted for brevity as Supabase is primary now
     
+    // Update Events List (Sorted Newest Date First)
+    const sortedEvents = Array.from(eventSet).sort((a, b) => {
+        if (a === 'default') return 1;
+        if (b === 'default') return -1;
+        return new Date(b).getTime() - new Date(a).getTime();
+    });
+    setAvailableEvents(sortedEvents);
+
     // Convert Map to Array and Sort by Time
     const sortedLogs = Array.from(combinedLogsMap.values()).sort((a, b) => 
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
 
     setLogs(sortedLogs);
+  };
+
+  // --- FILTERED LOGS ---
+  const filteredLogs = filterEvent === 'ALL' 
+    ? logs 
+    : logs.filter(log => (log.eventDeadline || 'default') === filterEvent);
+
+  const formatEventLabel = (deadline: string) => {
+      if (deadline === 'default' || deadline === 'null') return 'Global Session (No Timer)';
+      try {
+          const date = new Date(deadline);
+          return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+      } catch {
+          return deadline;
+      }
   };
 
   // --- LOG DELETION ---
@@ -471,11 +504,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                     <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                         <Camera className="text-red-500"/> Target Logs
-                        <span className="text-xs font-normal text-slate-500 ml-2 animate-pulse">(Consolidated by IP)</span>
+                        <span className="text-xs font-normal text-slate-500 ml-2 animate-pulse">(Consolidated by IP + Session)</span>
                     </h1>
-                    <div className="flex gap-2">
+
+                    <div className="flex flex-wrap items-center gap-2">
+                         {/* EVENT FILTER DROPDOWN */}
+                         <div className="relative flex items-center">
+                            <Filter size={14} className="absolute left-3 text-slate-400 pointer-events-none" />
+                            <select 
+                                value={filterEvent}
+                                onChange={(e) => setFilterEvent(e.target.value)}
+                                className="pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs font-bold text-white outline-none focus:border-indigo-500 appearance-none min-w-[180px]"
+                            >
+                                <option value="ALL">All Events</option>
+                                {availableEvents.map(evt => (
+                                    <option key={evt} value={evt}>
+                                        {formatEventLabel(evt)}
+                                    </option>
+                                ))}
+                            </select>
+                         </div>
+
                         <button onClick={handleClearAllLogs} className="bg-red-900/40 text-red-400 border border-red-800/50 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-900/60 font-bold transition-colors text-xs">
-                             <AlertOctagon size={14}/> Clear Database
+                             <AlertOctagon size={14}/> Clear DB
                         </button>
                         <button onClick={loadLogs} className="bg-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-700 text-xs font-bold">
                             <RefreshCw size={14}/> Refresh
@@ -488,6 +539,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                         <thead className="bg-slate-800/50 text-slate-400 font-medium">
                             <tr>
                                 <th className="p-4 w-[250px]">Identity & Status</th>
+                                <th className="p-4 w-[150px]">Event / Session</th> {/* NEW COLUMN */}
                                 <th className="p-4 w-[150px]">Network (IP)</th>
                                 <th className="p-4 w-[250px]">Location Info</th>
                                 <th className="p-4 w-[250px]">Device Fingerprint</th>
@@ -497,10 +549,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800">
-                            {logs.length === 0 ? (
-                                <tr><td colSpan={7} className="p-8 text-center text-slate-500">No targets detected yet.</td></tr>
+                            {filteredLogs.length === 0 ? (
+                                <tr><td colSpan={8} className="p-8 text-center text-slate-500">No targets detected for this filter.</td></tr>
                             ) : (
-                                logs.map((log, idx) => (
+                                filteredLogs.map((log, idx) => (
                                     <tr key={idx} className={`hover:bg-slate-800/30 transition-colors ${log.status === 'VOTER' ? 'bg-amber-900/5' : ''}`}>
                                         <td className="p-4 align-top">
                                             <div className="mb-2">
@@ -550,6 +602,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                                             <div className="text-[10px] text-slate-500">{new Date(log.timestamp).toLocaleTimeString()}</div>
                                         </td>
                                         
+                                        {/* EVENT SESSION COLUMN */}
+                                        <td className="p-4 align-top">
+                                            {log.eventDeadline && log.eventDeadline !== 'default' && log.eventDeadline !== 'null' ? (
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 w-fit">
+                                                        <Calendar size={10} />
+                                                        {new Date(log.eventDeadline).toLocaleDateString(undefined, {month:'short', day:'numeric'})}
+                                                    </span>
+                                                    <span className="text-[9px] text-slate-500 font-mono">
+                                                        Deadline: {new Date(log.eventDeadline).toLocaleTimeString(undefined, {hour:'2-digit', minute:'2-digit'})}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-[10px] text-slate-600 italic">Global Session</span>
+                                            )}
+                                        </td>
+
                                         {/* IP ADDRESS COLUMN */}
                                         <td className="p-4 align-top">
                                             <a 

