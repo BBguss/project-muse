@@ -200,11 +200,42 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                         // 2. Prefer Latest Timestamp
                         const isNewer = new Date(u.last_login) > new Date(existing.timestamp);
                         
-                        // 3. Consolidate Status (Sticky Voter)
+                        // 3. Consolidate Status (Sticky Voter - PRIORITY)
+                        // Once a VOTER, always a VOTER for this IP/Session
                         const finalStatus = (existing.status === 'VOTER' || isVoter) ? 'VOTER' : 'VISITOR';
-                        const finalAction = finalStatus === 'VOTER' ? (existing.action.includes('Voted') ? existing.action : `Voted for ${voteTarget}`) : (isNewer ? logEntry.action : existing.action);
+                        
+                        // 4. Action Priority
+                        // If status is VOTER, ensure action reflects that, even if latest log is just a visit
+                        let finalAction = existing.action;
+                        if (finalStatus === 'VOTER') {
+                             if (isVoter) finalAction = `Voted for ${voteTarget}`;
+                             else if (existing.action.includes('Voted')) finalAction = existing.action;
+                             else finalAction = `Voted for ${voteTarget || 'Unknown'}`;
+                        } else {
+                             finalAction = isNewer ? logEntry.action : existing.action;
+                        }
 
-                        // 4. Determine Representative User ID
+                        // 5. LOCATION PRESERVATION (CRITICAL FIX)
+                        // If we have precise location from an old session, DO NOT overwrite it with 
+                        // approximate/null location from a new "cleared cache" session.
+                        let finalLocation = existing.location;
+                        const newLoc = u.location_data;
+                        const oldLoc = existing.location;
+
+                        // Helper to check if location is "Precise" (Accuracy < 2000m implies GPS/WiFi, not just generic IP)
+                        const isNewPrecise = newLoc && newLoc.lat && newLoc.accuracy && newLoc.accuracy < 2000;
+                        const isOldPrecise = oldLoc && oldLoc.lat && oldLoc.accuracy && oldLoc.accuracy < 2000;
+
+                        if (isNewPrecise) {
+                            finalLocation = newLoc; // Always take new precise data
+                        } else if (isOldPrecise) {
+                            finalLocation = oldLoc; // KEEP old precise data if new data is weak
+                        } else {
+                            // If both are weak/null, take the newer one
+                            finalLocation = isNewer ? newLoc : oldLoc; 
+                        }
+
+                        // 6. Determine Representative User ID
                         // If one has an alias, keep that ID. Else keep latest.
                         let representativeUser = existing.user;
                         if (existingAlias) representativeUser = existing.user;
@@ -217,6 +248,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                             timestamp: isNewer ? u.last_login : existing.timestamp,
                             status: finalStatus,
                             action: finalAction,
+                            location: finalLocation, // Used the prioritized location
                             device: {
                                 ...existing.device,
                                 ...u.device_info, // Merge specs
