@@ -107,6 +107,7 @@ function App() {
       setVotingDeadline(deadline);
       
       // Check vote status against DB
+      // IMPORTANT: checkUserVoted will now auto-clear LocalStorage if DB is reset by Admin
       const voted = await dataService.checkUserVoted(guestId);
       setHasVoted(voted);
   }, [guestId]);
@@ -121,9 +122,17 @@ function App() {
     // Subscribe to Timer/Settings Changes
     const unsubscribeSettings = dataService.subscribeToSettings(() => refreshSettings());
 
+    // NEW: Periodic polling to catch "Session Reset" actions by Admin
+    // Since Supabase Subscriptions don't easily track row deletions for *specific* users efficiently on client side without auth,
+    // we poll the status occasionally to ensure UI updates if Admin resets vote.
+    const pollInterval = setInterval(() => {
+        refreshSettings();
+    }, 5000);
+
     return () => {
         unsubscribeVotes();
         unsubscribeSettings();
+        clearInterval(pollInterval);
     };
   }, [fetchCharacters, refreshSettings]);
 

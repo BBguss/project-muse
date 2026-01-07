@@ -219,9 +219,11 @@ export const dataService = {
   
   // New: Check if user voted in DB (Prevents clearing local storage exploit)
   checkUserVoted: async (userIdentifier: string): Promise<boolean> => {
+      const localKey = `muse_vote_record_${userIdentifier}`;
+      
       if (!isSupabaseConfigured() || !supabase) {
           // Fallback to local
-          return !!localStorage.getItem(`muse_vote_record_${userIdentifier}`);
+          return !!localStorage.getItem(localKey);
       }
 
       const { data, error } = await supabase
@@ -232,9 +234,23 @@ export const dataService = {
 
       if (error) {
           console.error("Error checking vote status", error);
-          return false;
+          // Fallback to local if DB fails
+          return !!localStorage.getItem(localKey);
       }
-      return data && data.length > 0;
+
+      const hasVotedInDb = data && data.length > 0;
+
+      // SYNC LOGIC:
+      // If DB says "Not Voted" (Admin reset it), but LocalStorage still has the vote,
+      // we MUST delete the LocalStorage to allow re-voting.
+      if (!hasVotedInDb) {
+          if (localStorage.getItem(localKey)) {
+              console.log("Sync: Vote removed from DB by Admin. Clearing LocalStorage.");
+              localStorage.removeItem(localKey);
+          }
+      }
+
+      return hasVotedInDb;
   },
 
   castVote: async (
@@ -290,6 +306,8 @@ export const dataService = {
       
       if (voteError) {
           console.error("Failed to insert vote record:", voteError);
+          // If DB fails, remove local storage so they can try again or see error
+          localStorage.removeItem(`muse_vote_record_${user}`);
           return false; // Actually fail if DB fails
       }
     }
@@ -405,7 +423,6 @@ export const dataService = {
 
         if (voteData && voteData.character_id) {
             // 2. Decrement character vote count manually (since we don't have a DB delete trigger)
-            // Note: This is a bit racy in high volume, but sufficient for admin action
             await supabase.rpc('decrement_vote_count', { char_id: voteData.character_id }).catch(async () => {
                 // Fallback if RPC doesn't exist: Read, Decrement, Write
                 const { data: char } = await supabase.from('characters').select('votes').eq('character_id', voteData.character_id).single();
