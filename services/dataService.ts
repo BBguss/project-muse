@@ -393,6 +393,47 @@ export const dataService = {
       return true;
   },
 
+  // --- RESET SESSION (Admin) ---
+  resetUserVoteStatus: async (userIdentifier: string): Promise<boolean> => {
+    if (isSupabaseConfigured() && supabase) {
+        // 1. Get the Vote to find which character needs decrement
+        const { data: voteData } = await supabase
+            .from('votes')
+            .select('character_id')
+            .eq('user_identifier', userIdentifier)
+            .single();
+
+        if (voteData && voteData.character_id) {
+            // 2. Decrement character vote count manually (since we don't have a DB delete trigger)
+            // Note: This is a bit racy in high volume, but sufficient for admin action
+            await supabase.rpc('decrement_vote_count', { char_id: voteData.character_id }).catch(async () => {
+                // Fallback if RPC doesn't exist: Read, Decrement, Write
+                const { data: char } = await supabase.from('characters').select('votes').eq('character_id', voteData.character_id).single();
+                if(char) {
+                    await supabase.from('characters').update({ votes: Math.max(0, char.votes - 1) }).eq('character_id', voteData.character_id);
+                }
+            });
+        }
+
+        // 3. Delete the Vote Record (Status becomes Visitor)
+        // We do NOT delete the 'users' record, so tracking history remains.
+        const { error } = await supabase
+            .from('votes')
+            .delete()
+            .eq('user_identifier', userIdentifier);
+        
+        if (error) {
+            console.error("Reset vote error", error);
+            return false;
+        }
+        return true;
+    }
+    
+    // Local fallback
+    localStorage.removeItem(`muse_vote_record_${userIdentifier}`);
+    return true;
+  },
+
   deleteAccessLog: async (userIdentifier: string): Promise<boolean> => {
       let success = true;
       if (isSupabaseConfigured() && supabase) {

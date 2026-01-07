@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, LogOut, Edit3, Trash2, Save, RefreshCcw, Trophy, Activity,
   Search, Zap, Menu, X, Upload, Link as LinkIcon, Monitor, Smartphone, MapPin, 
   Calendar, Clock, Camera, FolderOpen, Download, FileJson, Globe, RefreshCw, Cpu, Timer, Ban,
-  Eye, CheckCircle2, Crown, Sword, Shield, Star, Ghost, Flame, Plus, Sparkles, Network, AlertOctagon, Edit2, Filter
+  Eye, CheckCircle2, Crown, Sword, Shield, Star, Ghost, Flame, Plus, Sparkles, Network, AlertOctagon, Edit2, Filter, RotateCcw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { dataService } from '../services/dataService';
@@ -305,6 +305,35 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
           }
           // UI Optimistic Update
           setLogs(prev => prev.filter(l => l.ip !== log.ip));
+      }
+  };
+  
+  // --- RESET SESSION (NEW) ---
+  const handleResetSession = async (log: ActivityLog) => {
+      if (!confirm(`Reset Voting Status for ${log.user}? This will allow them to vote again.`)) return;
+
+      let success = true;
+      // Reset for all linked IDs to be safe, though usually only one voted
+      for (const uid of log.linkedIds) {
+          const res = await dataService.resetUserVoteStatus(uid);
+          if (!res) success = false;
+      }
+
+      if (success) {
+          // Optimistic UI Update: Change status to VISITOR
+          setLogs(prev => prev.map(l => {
+              if (l.user === log.user || l.ip === log.ip) {
+                  return { 
+                      ...l, 
+                      status: 'VISITOR', 
+                      action: l.action.replace(/Voted for .*/, 'Session Reset (Ready to Vote)') 
+                  };
+              }
+              return l;
+          }));
+          alert("Session reset successfully. User can vote again.");
+      } else {
+          alert("Failed to reset session.");
       }
   };
 
@@ -705,13 +734,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ characters, setCharacte
                                             </button>
                                         </td>
                                         <td className="p-4 align-top text-center">
-                                            <button 
-                                                onClick={() => handleDeleteLog(log)}
-                                                className="p-2 bg-slate-800 hover:bg-red-900/30 text-slate-500 hover:text-red-500 rounded-lg transition-colors mx-auto block"
-                                                title="Delete Log"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
+                                            <div className="flex gap-2 justify-center">
+                                                {/* NEW RESET BUTTON */}
+                                                <button 
+                                                    onClick={() => handleResetSession(log)}
+                                                    className="p-2 bg-slate-800 hover:bg-indigo-900/30 text-slate-500 hover:text-indigo-400 rounded-lg transition-colors"
+                                                    title="Reset Session (Allow Re-vote)"
+                                                >
+                                                    <RotateCcw size={16} />
+                                                </button>
+
+                                                <button 
+                                                    onClick={() => handleDeleteLog(log)}
+                                                    className="p-2 bg-slate-800 hover:bg-red-900/30 text-slate-500 hover:text-red-500 rounded-lg transition-colors"
+                                                    title="Delete Log"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))
