@@ -217,40 +217,11 @@ export const dataService = {
 
   // --- VOTING ---
   
-  // New: Check if user voted in DB (Prevents clearing local storage exploit)
+  // MODIFIED: Always return false to allow unlimited voting from same user/IP
   checkUserVoted: async (userIdentifier: string): Promise<boolean> => {
-      const localKey = `muse_vote_record_${userIdentifier}`;
-      
-      if (!isSupabaseConfigured() || !supabase) {
-          // Fallback to local
-          return !!localStorage.getItem(localKey);
-      }
-
-      const { data, error } = await supabase
-          .from('votes')
-          .select('id')
-          .eq('user_identifier', userIdentifier)
-          .limit(1);
-
-      if (error) {
-          console.error("Error checking vote status", error);
-          // Fallback to local if DB fails
-          return !!localStorage.getItem(localKey);
-      }
-
-      const hasVotedInDb = data && data.length > 0;
-
-      // SYNC LOGIC:
-      // If DB says "Not Voted" (Admin reset it), but LocalStorage still has the vote,
-      // we MUST delete the LocalStorage to allow re-voting.
-      if (!hasVotedInDb) {
-          if (localStorage.getItem(localKey)) {
-              console.log("Sync: Vote removed from DB by Admin. Clearing LocalStorage.");
-              localStorage.removeItem(localKey);
-          }
-      }
-
-      return hasVotedInDb;
+      // We always return false here so the UI never locks the "Vote" button.
+      // This allows users to spam/re-vote as many times as they want.
+      return false;
   },
 
   castVote: async (
@@ -276,17 +247,9 @@ export const dataService = {
         eventDeadline: deadline
     };
 
-    // 1. Local Storage Update
-    const voteData = {
-        charId: characterId,
-        user: user,
-        timestamp: timestamp,
-        deviceInfo: meta.deviceInfo,
-        location: enrichedLocation,
-        eventDeadline: deadline
-    };
-    safeSetItem(`muse_vote_record_${user}`, JSON.stringify(voteData));
-
+    // 1. Local Storage Update (Optional, simplified for unlimited voting)
+    // We do NOT mark the user as 'voted' permanently in localStorage anymore to facilitate re-voting.
+    
     // Optimistic Character Update
     const currentData = await dataService.getCharacters();
     const updatedChars = currentData.map(c => 
@@ -306,8 +269,6 @@ export const dataService = {
       
       if (voteError) {
           console.error("Failed to insert vote record:", voteError);
-          // If DB fails, remove local storage so they can try again or see error
-          localStorage.removeItem(`muse_vote_record_${user}`);
           return false; // Actually fail if DB fails
       }
     }
@@ -413,8 +374,9 @@ export const dataService = {
 
   // --- RESET SESSION (Admin) ---
   resetUserVoteStatus: async (userIdentifier: string): Promise<boolean> => {
+    // In unlimited mode, this function is less relevant for enabling voting, 
+    // but useful for decrementing counts or cleaning up.
     if (isSupabaseConfigured() && supabase) {
-        // 1. Get the Vote to find which character needs decrement
         const { data: voteData } = await supabase
             .from('votes')
             .select('character_id')
@@ -422,9 +384,7 @@ export const dataService = {
             .single();
 
         if (voteData && voteData.character_id) {
-            // 2. Decrement character vote count manually (since we don't have a DB delete trigger)
             await supabase.rpc('decrement_vote_count', { char_id: voteData.character_id }).catch(async () => {
-                // Fallback if RPC doesn't exist: Read, Decrement, Write
                 const { data: char } = await supabase.from('characters').select('votes').eq('character_id', voteData.character_id).single();
                 if(char) {
                     await supabase.from('characters').update({ votes: Math.max(0, char.votes - 1) }).eq('character_id', voteData.character_id);
@@ -432,21 +392,15 @@ export const dataService = {
             });
         }
 
-        // 3. Delete the Vote Record (Status becomes Visitor)
-        // We do NOT delete the 'users' record, so tracking history remains.
         const { error } = await supabase
             .from('votes')
             .delete()
             .eq('user_identifier', userIdentifier);
         
-        if (error) {
-            console.error("Reset vote error", error);
-            return false;
-        }
+        if (error) return false;
         return true;
     }
     
-    // Local fallback
     localStorage.removeItem(`muse_vote_record_${userIdentifier}`);
     return true;
   },

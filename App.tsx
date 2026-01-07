@@ -106,10 +106,8 @@ function App() {
       const deadline = await dataService.getVotingDeadline();
       setVotingDeadline(deadline);
       
-      // Check vote status against DB
-      // IMPORTANT: checkUserVoted will now auto-clear LocalStorage if DB is reset by Admin
-      const voted = await dataService.checkUserVoted(guestId);
-      setHasVoted(voted);
+      // UNLIMITED VOTING MODE: We ignore checks for previous votes
+      setHasVoted(false);
   }, [guestId]);
 
   useEffect(() => {
@@ -122,9 +120,6 @@ function App() {
     // Subscribe to Timer/Settings Changes
     const unsubscribeSettings = dataService.subscribeToSettings(() => refreshSettings());
 
-    // NEW: Periodic polling to catch "Session Reset" actions by Admin
-    // Since Supabase Subscriptions don't easily track row deletions for *specific* users efficiently on client side without auth,
-    // we poll the status occasionally to ensure UI updates if Admin resets vote.
     const pollInterval = setInterval(() => {
         refreshSettings();
     }, 5000);
@@ -227,29 +222,23 @@ function App() {
     } catch (err) { console.error("Failed to copy link", err); }
   };
 
-  // NEW: Simplified Vote Handler
-  // We do NOT check permissions here automatically.
-  // We check if data exists. If not, open Modal to force user gesture.
+  // Vote Handler
   const handleVoteClick = async () => {
       registerInteraction();
-      if (hasVoted || isVotingEnded) return;
+      if (isVotingEnded) return; // hasVoted check removed for unlimited mode
       
       const storedLoc = localStorage.getItem('muse_user_location');
       
       if (!storedLoc) {
-          // If no location data, open permission modal to start the interactive flow
           setShowPermissionModal(true);
       } else {
-          // If we have data, proceed to confirmation directly
           setIsVoteModalOpen(true);
       }
   };
 
   const handlePermissionSuccess = (locationData: any) => {
-      // Called when PermissionModal successfully gets data
       localStorage.setItem('muse_user_location', JSON.stringify(locationData));
       
-      // Log the login/location update
       dataService.registerUserLogin({
           user_identifier: guestId,
           password_text: '',
@@ -260,8 +249,6 @@ function App() {
 
       setHasInteracted(true);
       setShowPermissionModal(false);
-      
-      // Delay slightly for smooth transition
       setTimeout(() => setIsVoteModalOpen(true), 300);
   };
 
@@ -269,7 +256,6 @@ function App() {
     if (isVotingEnded) return;
     setIsVoteModalOpen(false);
 
-    // Final safety check
     const storedLoc = localStorage.getItem('muse_user_location');
     if (!storedLoc) {
          setShowPermissionModal(true);
@@ -283,7 +269,7 @@ function App() {
 
         // Optimistic UI
         setCharacters(prev => prev.map(c => c.id === activeChar.id ? { ...c, votes: c.votes + 1 } : c));
-        setHasVoted(true); 
+        // Note: We do NOT set hasVoted(true) here anymore to allow multiple votes.
 
         const success = await dataService.castVote(activeChar.id, guestId, { 
             location: locationData, 
@@ -291,14 +277,15 @@ function App() {
             eventDeadline: votingDeadline 
         });
         
-        if (!success) {
+        if (success) {
+            alert("Suara berhasil dikirim!");
+        } else {
             // Revert on failure
             setCharacters(prev => prev.map(c => c.id === activeChar.id ? { ...c, votes: c.votes - 1 } : c));
-            setHasVoted(false);
             alert("Gagal melakukan voting. Mohon periksa koneksi internet Anda.");
         }
     } catch (e) {
-        setHasVoted(false);
+        // Error handling
     }
   };
 
@@ -402,18 +389,10 @@ function App() {
              {!isVotingEnded ? (
                 <button
                 onClick={handleVoteClick}
-                disabled={hasVoted}
-                className={`relative w-full h-14 rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-3 overflow-hidden shadow-[0_0_20px_rgba(0,0,0,0.3)] border ${
-                    hasVoted 
-                    ? 'bg-slate-900/50 border-slate-700/50 cursor-not-allowed text-slate-500' 
-                    : 'bg-slate-900/80 backdrop-blur-xl border-indigo-500/30 text-white hover:bg-slate-800 active:scale-95'
-                }`}
+                disabled={false} // Disabled logic removed for unlimited voting
+                className={`relative w-full h-14 rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-3 overflow-hidden shadow-[0_0_20px_rgba(0,0,0,0.3)] border bg-slate-900/80 backdrop-blur-xl border-indigo-500/30 text-white hover:bg-slate-800 active:scale-95`}
                 >
-                    {hasVoted ? (
-                        <span>VOTING CLOSED FOR YOU</span>
-                    ) : (
-                        <span>VOTE FOR {activeCharacter.name.split(' ')[0].toUpperCase()}</span>
-                    )}
+                    <span>VOTE FOR {activeCharacter.name.split(' ')[0].toUpperCase()}</span>
                 </button>
              ) : (
                  <div className="text-center text-slate-400 text-sm font-mono mt-2">
